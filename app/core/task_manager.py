@@ -161,6 +161,39 @@ class TaskManager:
             # Limit the number of results
             return sorted_tasks[:limit]
     
+    def count_active_tasks(self) -> int:
+        """
+        Count the number of active tasks (pending or processing).
+        
+        Returns:
+            Number of active tasks
+        """
+        with self.lock:
+            return sum(1 for task in self.tasks.values() 
+                      if task["status"] in ["pending", "processing"])
+    
+    def count_completed_tasks(self) -> int:
+        """
+        Count the number of completed tasks.
+        
+        Returns:
+            Number of completed tasks
+        """
+        with self.lock:
+            return sum(1 for task in self.tasks.values() 
+                      if task["status"] == "completed")
+    
+    def count_failed_tasks(self) -> int:
+        """
+        Count the number of failed tasks.
+        
+        Returns:
+            Number of failed tasks
+        """
+        with self.lock:
+            return sum(1 for task in self.tasks.values() 
+                      if task["status"] in ["error", "failed"])
+    
     def delete_task(self, task_id: str) -> bool:
         """
         Delete a task by ID.

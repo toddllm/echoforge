@@ -10,6 +10,9 @@ from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional
 import os
 import uuid
+import platform
+import psutil
+import torch
 from pathlib import Path
 
 from app.core import config
@@ -38,6 +41,87 @@ router = APIRouter(prefix=config.API_PREFIX, tags=config.API_TAGS)
 async def health_check():
     """Health check endpoint for monitoring."""
     return {"status": "ok", "version": config.APP_VERSION}
+
+
+@router.get("/diagnostic")
+async def system_diagnostic():
+    """
+    System diagnostic endpoint providing information about the system,
+    CSM model, and voice generation capabilities.
+    """
+    try:
+        # System information
+        system_info = {
+            "os": platform.system(),
+            "os_version": platform.version(),
+            "python_version": platform.python_version(),
+            "cpu_count": psutil.cpu_count(logical=False),
+            "logical_cpu_count": psutil.cpu_count(logical=True),
+            "memory_total_gb": round(psutil.virtual_memory().total / (1024**3), 2),
+            "memory_available_gb": round(psutil.virtual_memory().available / (1024**3), 2),
+        }
+        
+        # CUDA information
+        cuda_info = {
+            "cuda_available": torch.cuda.is_available(),
+            "cuda_device_count": torch.cuda.device_count() if torch.cuda.is_available() else 0,
+        }
+        
+        if torch.cuda.is_available():
+            cuda_info["cuda_version"] = torch.version.cuda
+            cuda_info["devices"] = []
+            
+            for i in range(torch.cuda.device_count()):
+                device_props = torch.cuda.get_device_properties(i)
+                cuda_info["devices"].append({
+                    "name": device_props.name,
+                    "total_memory_gb": round(device_props.total_memory / (1024**3), 2),
+                    "major": device_props.major,
+                    "minor": device_props.minor,
+                })
+        
+        # Model information
+        model_info = {}
+        if voice_generator is not None:
+            model_info = {
+                "model_loaded": voice_generator.model is not None,
+                "model_path": voice_generator.model_path,
+                "output_dir": voice_generator.output_dir,
+                "is_placeholder": isinstance(voice_generator.model, type) and "Placeholder" in voice_generator.model.__name__ if voice_generator.model else False,
+            }
+            
+            # Get available voices
+            try:
+                voices = voice_generator.list_available_voices()
+                model_info["available_voices"] = len(voices)
+            except Exception as e:
+                model_info["available_voices"] = 0
+                model_info["voice_list_error"] = str(e)
+        
+        # Task system information
+        task_info = {}
+        if task_manager is not None:
+            try:
+                task_info = {
+                    "active_tasks": task_manager.count_active_tasks(),
+                    "completed_tasks": task_manager.count_completed_tasks(),
+                    "failed_tasks": task_manager.count_failed_tasks(),
+                }
+            except Exception as e:
+                task_info["error"] = str(e)
+        
+        return {
+            "system": system_info,
+            "cuda": cuda_info,
+            "model": model_info,
+            "tasks": task_info,
+        }
+    except Exception as e:
+        logger.error(f"Error generating system diagnostic: {str(e)}")
+        return {
+            "status": "error",
+            "error": str(e)
+        }
 
 
 # Simple mock data for testing

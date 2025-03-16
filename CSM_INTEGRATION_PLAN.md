@@ -21,11 +21,11 @@ This document outlines the plan for integrating the Conversational Speech Model 
 ## 2. API Implementation
 
 ### 2.1 REST API Endpoints
-- [ ] Implement health check endpoint (`/api/health`)
+- [x] Implement health check endpoint (`/api/health`)
+- [x] Add system diagnostics endpoint (`/api/diagnostic`)
 - [ ] Create voice listing endpoint (`/api/voices`)
 - [ ] Add speech generation endpoint (`/api/generate`)
 - [ ] Implement task status endpoint (`/api/tasks/{task_id}`)
-- [ ] Add system diagnostics endpoint (`/api/diagnostic`)
 
 ### 2.2 Background Task System
 - [ ] Create task queue for handling generation requests
@@ -92,10 +92,10 @@ This document outlines the plan for integrating the Conversational Speech Model 
 - [x] Document core components
 
 ### Phase 2: API and Task System
-- [ ] Implement REST API endpoints
-- [ ] Create background task system
+- [x] Implement health check and diagnostic endpoints
+- [ ] Create voice listing and generation endpoints
+- [ ] Implement task status endpoint
 - [ ] Add voice management functionality
-- [ ] Implement error handling
 - [ ] Write integration tests
 
 ### Phase 3: Web Interface
@@ -139,12 +139,12 @@ This document outlines the plan for integrating the Conversational Speech Model 
 
 **Overall Progress:**  
 - [x] Phase 1: Core Model Integration (100% complete)
-- [ ] Phase 2: API and Task System (0% complete)
+- [ ] Phase 2: API and Task System (20% complete)
 - [ ] Phase 3: Web Interface (0% complete)
 - [ ] Phase 4: Documentation and Refinement (0% complete)
 
 **Current Focus:**  
-Phase 2: API and Task System - Implementing REST API endpoints
+Phase 2: API and Task System - Implementing voice listing and generation endpoints
 
 **Next Milestone Date:**  
 [TBD]
