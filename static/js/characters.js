@@ -75,16 +75,18 @@ document.addEventListener('DOMContentLoaded', () => {
             
             // Add placeholder images and sample URLs
             characters.forEach(character => {
+                // Ensure required properties exist
+                character.name = character.name || `Voice ${character.speaker_id}`;
+                character.description = character.description || 'No description available';
+                character.gender = character.gender || 'neutral';
+                character.style = character.style || 'default';
+                
                 // Generate placeholder image based on speaker ID
                 const imageId = (character.speaker_id % 10) + 1;
-                const gender = character.gender || 'neutral';
-                character.image_url = `/static/images/${gender}${imageId}.jpg`;
+                character.image_url = `/static/images/${character.gender}${imageId}.jpg`;
                 
                 // Add sample audio URL (this would be real in production)
                 character.sample_url = `/static/samples/voice_${character.speaker_id}_sample.mp3`;
-                
-                // Add default style if not present
-                character.style = character.style || 'default';
             });
             
         } catch (error) {
@@ -181,8 +183,8 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Set data attributes
         card.dataset.speakerId = character.speaker_id;
-        card.dataset.gender = character.gender;
-        card.dataset.style = character.style;
+        card.dataset.gender = character.gender || 'neutral';
+        card.dataset.style = character.style || 'default';
         
         // Set content
         const avatar = card.querySelector('.character-avatar img');
@@ -193,10 +195,12 @@ document.addEventListener('DOMContentLoaded', () => {
         card.querySelector('.character-description').textContent = character.description;
         
         const genderBadge = card.querySelector('.gender-badge');
-        genderBadge.textContent = character.gender.charAt(0).toUpperCase() + character.gender.slice(1);
+        const gender = character.gender || 'neutral';
+        genderBadge.textContent = gender.charAt(0).toUpperCase() + gender.slice(1);
         
         const styleBadge = card.querySelector('.style-badge');
-        styleBadge.textContent = character.style.charAt(0).toUpperCase() + character.style.slice(1);
+        const style = character.style || 'default';
+        styleBadge.textContent = style.charAt(0).toUpperCase() + style.slice(1);
         
         // Set up audio player
         const audio = card.querySelector('audio');
@@ -251,11 +255,14 @@ document.addEventListener('DOMContentLoaded', () => {
         modalCharacterAvatar.alt = `${character.name} avatar`;
         modalCharacterDescription.textContent = character.description;
         
-        modalGenderBadge.textContent = character.gender.charAt(0).toUpperCase() + character.gender.slice(1);
-        modalStyleBadge.textContent = character.style.charAt(0).toUpperCase() + character.style.slice(1);
+        const gender = character.gender || 'neutral';
+        modalGenderBadge.textContent = gender.charAt(0).toUpperCase() + gender.slice(1);
+        
+        const style = character.style || 'default';
+        modalStyleBadge.textContent = style.charAt(0).toUpperCase() + style.slice(1);
         
         // Set default style
-        modalStyle.value = character.style;
+        modalStyle.value = character.style || 'default';
         
         // Show modal
         modal.style.display = 'block';

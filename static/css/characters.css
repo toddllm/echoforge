@@ -59,6 +59,7 @@ nav ul li a.active {
     display: block;
     margin-bottom: 0.5rem;
     font-weight: 500;
+    color: var(--text-color);
 }
 
 .filter-group select,
@@ -80,6 +81,14 @@ nav ul li a.active {
 }
 
 .loading-indicator {
+    grid-column: 1 / -1;
+    text-align: center;
+    padding: 2rem;
+    font-size: 1.2rem;
+    color: var(--text-secondary);
+}
+
+.no-results {
     grid-column: 1 / -1;
     text-align: center;
     padding: 2rem;
@@ -128,6 +137,7 @@ nav ul li a.active {
     margin-top: 0;
     margin-bottom: 0.75rem;
     font-size: 1.4rem;
+    color: var(--text-color);
 }
 
 .character-description {
@@ -261,6 +271,7 @@ nav ul li a.active {
 .modal-header h2 {
     margin: 0;
     font-size: 1.8rem;
+    color: var(--text-color);
 }
 
 .modal-body {
@@ -294,6 +305,7 @@ nav ul li a.active {
 .character-info-large p {
     margin-top: 0;
     line-height: 1.6;
+    color: var(--text-color);
 }
 
 .generation-form {
@@ -306,6 +318,7 @@ nav ul li a.active {
 .generation-form h3 {
     margin-top: 0;
     margin-bottom: 1.5rem;
+    color: var(--text-color);
 }
 
 .generation-result {
@@ -322,6 +335,7 @@ nav ul li a.active {
 .generation-result h3 {
     margin-top: 0;
     margin-bottom: 1.5rem;
+    color: var(--text-color);
 }
 
 .audio-controls {
@@ -361,6 +375,26 @@ nav ul li a.active {
 
 .primary-btn:hover {
     background-color: var(--primary-dark);
+}
+
+/* Form elements in modal */
+.modal textarea,
+.modal input,
+.modal select {
+    width: 100%;
+    padding: 0.75rem;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background-color: var(--input-bg);
+    color: var(--text-color);
+    margin-bottom: 1rem;
+}
+
+.modal label {
+    display: block;
+    margin-bottom: 0.5rem;
+    color: var(--text-color);
+    font-weight: 500;
 }
 
 /* Responsive adjustments */

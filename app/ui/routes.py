@@ -10,6 +10,8 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from pathlib import Path
 
+from app.core import config
+
 # Configure logging
 logger = logging.getLogger("echoforge.ui")
 
@@ -25,7 +27,13 @@ templates = Jinja2Templates(directory=templates_dir)
 async def index(request: Request):
     """Render the home page."""
     logger.info("Rendering home page")
-    return templates.TemplateResponse("index.html", {"request": request})
+    return templates.TemplateResponse(
+        "index.html", 
+        {
+            "request": request,
+            "default_theme": config.DEFAULT_THEME
+        }
+    )
 
 
 @router.get("/generate", response_class=HTMLResponse)
@@ -36,7 +44,8 @@ async def generate_page(request: Request):
         "generate.html", 
         {
             "request": request,
-            "default_text": "Hello, this is a test of the voice generation system."
+            "default_text": "Hello, this is a test of the voice generation system.",
+            "default_theme": config.DEFAULT_THEME
         }
     )
 
@@ -49,6 +58,6 @@ async def characters_page(request: Request):
         "characters.html",
         {
             "request": request,
-            "default_theme": "light"
+            "default_theme": config.DEFAULT_THEME
         }
     ) 

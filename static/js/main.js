@@ -202,4 +202,27 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
         }
     }
+
+    // Apply saved theme preference on page load
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme) {
+        document.documentElement.setAttribute('data-theme', savedTheme);
+        if (themeToggleIcon) {
+            themeToggleIcon.textContent = savedTheme === 'dark' ? '☀️' : '🌙';
+        }
+    }
+    
+    // Range input value display
+    document.querySelectorAll('input[type="range"]').forEach(range => {
+        const valueDisplay = range.parentElement.querySelector('.parameter-value');
+        if (valueDisplay) {
+            // Update value display on input change
+            range.addEventListener('input', () => {
+                valueDisplay.textContent = range.value;
+            });
+            
+            // Set initial value
+            valueDisplay.textContent = range.value;
+        }
+    });
 }); 
