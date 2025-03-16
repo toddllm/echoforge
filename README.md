@@ -15,6 +15,18 @@ https://github.com/toddllm/echoforge
 - Web interface with light and dark mode support
 - Easy environment configuration
 
+## Technology
+
+EchoForge is built on top of the [Conversational Speech Model (CSM)](https://github.com/SesameAILabs/csm) from Sesame AI Labs. CSM is a speech generation model that generates high-quality, natural-sounding speech from text input. The model architecture employs a Llama backbone and a smaller audio decoder that produces Mimi audio codes.
+
+Key features of the CSM model:
+- High-quality speech synthesis
+- Support for multiple speakers
+- Contextual awareness for more natural-sounding conversations
+- Adjustable generation parameters (temperature, top-k)
+
+EchoForge wraps this technology in a user-friendly web interface and API, making it accessible for various applications.
+
 ## Installation
 
 ### Prerequisites
@@ -48,7 +60,7 @@ If you prefer to use pip:
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/echoforge.git
+git clone https://github.com/toddllm/echoforge.git
 cd echoforge
 
 # Create a virtual environment
@@ -193,12 +205,61 @@ Returns the status of a voice generation task.
 - `templates/` - HTML templates
 - `tests/` - Test suite
 
+## Roadmap
+
+Here are our plans for future development of EchoForge:
+
+### Short-term Goals (Next 1-3 months)
+
+- [ ] Voice fine-tuning interface for creating custom character voices
+- [ ] Batch processing for generating multiple voice clips at once
+- [ ] Improved voice style controls (emotion, pace, emphasis)
+- [ ] User accounts and voice library management
+- [ ] Enhanced audio playback controls (speed, pitch adjustment)
+
+### Medium-term Goals (3-6 months)
+
+- [ ] Voice cloning from sample audio
+- [ ] Multi-speaker conversation generation
+- [ ] Integration with popular content creation tools
+- [ ] Mobile application for on-the-go voice generation
+- [ ] Advanced audio post-processing options
+
+### Long-term Vision
+
+- [ ] Real-time voice generation for interactive applications
+- [ ] Multi-language support with accent preservation
+- [ ] Voice style transfer between characters
+- [ ] API marketplace for voice models and styles
+- [ ] Integration with virtual production pipelines
+
+## Contributing
+
+We welcome contributions to EchoForge! Here are some areas where help is needed:
+
+- Adding new voice models and styles
+- Improving the web interface
+- Enhancing documentation
+- Writing tests
+- Performance optimization
+
+Please see our [Contributing Guidelines](CONTRIBUTING.md) for more information.
+
+## Ethical Use
+
+EchoForge is designed for creative and legitimate use cases. Please use this technology responsibly:
+
+- Always disclose when audio is AI-generated when appropriate
+- Do not use for impersonation without explicit consent
+- Respect copyright and intellectual property rights
+- Follow applicable laws and regulations regarding synthetic media
+
 ## License
 
 [MIT License](LICENSE)
 
 ## Acknowledgements
 
-- This project uses the CSM model architecture for voice generation
+- This project uses the [CSM model architecture](https://github.com/SesameAILabs/csm) from Sesame AI Labs for voice generation
 - Special thanks to the open-source community for their contributions to speech synthesis technology
 
