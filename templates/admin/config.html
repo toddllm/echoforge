@@ -1,0 +1,336 @@
+{% extends "admin/layout.html" %}
+
+{% block title %}Configuration - EchoForge Admin{% endblock %}
+
+{% block page_title %}System Configuration{% endblock %}
+
+{% block content_actions %}
+<div class="action-buttons">
+    <button id="save-all-btn" class="button primary-button">Save All Changes</button>
+    <button id="reset-all-btn" class="button secondary-button">Reset All</button>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="config-management">
+    <div class="config-tabs">
+        <button class="tab-button active" data-tab="general">General</button>
+        <button class="tab-button" data-tab="model">Model</button>
+        <button class="tab-button" data-tab="server">Server</button>
+        <button class="tab-button" data-tab="security">Security</button>
+        <button class="tab-button" data-tab="tasks">Tasks</button>
+        <button class="tab-button" data-tab="advanced">Advanced</button>
+    </div>
+
+    <div class="tab-content active" id="general-tab">
+        <div class="config-section">
+            <h2>General Settings</h2>
+            <p class="section-description">Basic configuration options for the EchoForge application.</p>
+            
+            <form id="general-form" class="config-form">
+                <div class="form-group">
+                    <label for="app-name">Application Name</label>
+                    <input type="text" id="app-name" name="APP_NAME" value="{{ config.APP_NAME }}" class="form-control">
+                    <small class="form-text">Name of the application displayed in the UI</small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="app-description">Application Description</label>
+                    <input type="text" id="app-description" name="APP_DESCRIPTION" value="{{ config.APP_DESCRIPTION }}" class="form-control">
+                    <small class="form-text">Short description of the application</small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="default-theme">Default Theme</label>
+                    <select id="default-theme" name="DEFAULT_THEME" class="form-control">
+                        <option value="light" {% if config.DEFAULT_THEME == "light" %}selected{% endif %}>Light</option>
+                        <option value="dark" {% if config.DEFAULT_THEME == "dark" %}selected{% endif %}>Dark</option>
+                    </select>
+                    <small class="form-text">Default theme for new users</small>
+                </div>
+                
+                <div class="form-actions">
+                    <button type="submit" class="button primary-button">Save Changes</button>
+                    <button type="reset" class="button secondary-button">Reset</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="tab-content" id="model-tab">
+        <div class="config-section">
+            <h2>Model Settings</h2>
+            <p class="section-description">Configuration options for the CSM voice generation model.</p>
+            
+            <form id="model-form" class="config-form">
+                <div class="form-group">
+                    <label for="model-path">Model Path</label>
+                    <input type="text" id="model-path" name="MODEL_PATH" value="{{ config.MODEL_PATH }}" class="form-control">
+                    <small class="form-text">Path to the CSM model checkpoint file</small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="output-dir">Output Directory</label>
+                    <input type="text" id="output-dir" name="OUTPUT_DIR" value="{{ config.OUTPUT_DIR }}" class="form-control">
+                    <small class="form-text">Directory where generated voice files will be saved</small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="default-device">Default Inference Device</label>
+                    <select id="default-device" name="DEFAULT_DEVICE" class="form-control">
+                        <option value="auto" {% if config.DEFAULT_DEVICE == "auto" %}selected{% endif %}>Auto (Use GPU if available)</option>
+                        <option value="cuda" {% if config.DEFAULT_DEVICE == "cuda" %}selected{% endif %}>CUDA (GPU Only)</option>
+                        <option value="cpu" {% if config.DEFAULT_DEVICE == "cpu" %}selected{% endif %}>CPU Only</option>
+                    </select>
+                    <small class="form-text">Default device to use for voice generation</small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="default-speaker-id">Default Speaker ID</label>
+                    <input type="number" id="default-speaker-id" name="DEFAULT_SPEAKER_ID" value="{{ config.DEFAULT_SPEAKER_ID }}" min="1" class="form-control">
+                    <small class="form-text">Default speaker voice ID to use</small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="default-temperature">Default Temperature</label>
+                    <input type="number" id="default-temperature" name="DEFAULT_TEMPERATURE" value="{{ config.DEFAULT_TEMPERATURE }}" min="0.1" max="1.0" step="0.1" class="form-control">
+                    <small class="form-text">Default temperature for generation (0.1-1.0)</small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="default-top-k">Default Top-K</label>
+                    <input type="number" id="default-top-k" name="DEFAULT_TOP_K" value="{{ config.DEFAULT_TOP_K }}" min="1" class="form-control">
+                    <small class="form-text">Default top-K value for token selection</small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="default-style">Default Style</label>
+                    <input type="text" id="default-style" name="DEFAULT_STYLE" value="{{ config.DEFAULT_STYLE }}" class="form-control">
+                    <small class="form-text">Default voice style to use</small>
+                </div>
+                
+                <div class="form-actions">
+                    <button type="submit" class="button primary-button">Save Changes</button>
+                    <button type="reset" class="button secondary-button">Reset</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="tab-content" id="server-tab">
+        <div class="config-section">
+            <h2>Server Settings</h2>
+            <p class="section-description">Configuration options for the server and API.</p>
+            
+            <form id="server-form" class="config-form">
+                <div class="form-group">
+                    <label for="default-host">Default Host</label>
+                    <input type="text" id="default-host" name="DEFAULT_HOST" value="{{ config.DEFAULT_HOST }}" class="form-control">
+                    <small class="form-text">Default host to bind to (typically 127.0.0.1 for local access only)</small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="public-host">Public Host</label>
+                    <input type="text" id="public-host" name="PUBLIC_HOST" value="{{ config.PUBLIC_HOST }}" class="form-control">
+                    <small class="form-text">Host to bind to when serving publicly (typically 0.0.0.0)</small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="port">Port</label>
+                    <input type="number" id="port" name="DEFAULT_PORT" value="{{ config.DEFAULT_PORT }}" min="1024" max="65535" class="form-control">
+                    <small class="form-text">Port to bind the server to (default: 8765)</small>
+                </div>
+                
+                <div class="form-group">
+                    <div class="checkbox-control">
+                        <input type="checkbox" id="allow-public-serving" name="ALLOW_PUBLIC_SERVING" {% if config.ALLOW_PUBLIC_SERVING %}checked{% endif %}>
+                        <label for="allow-public-serving">Allow Public Serving</label>
+                    </div>
+                    <small class="form-text">If enabled, the server can be accessed from other machines on the network</small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="api-prefix">API Prefix</label>
+                    <input type="text" id="api-prefix" name="API_PREFIX" value="{{ config.API_PREFIX }}" class="form-control">
+                    <small class="form-text">Prefix for all API endpoints (default: /api)</small>
+                </div>
+                
+                <div class="form-actions">
+                    <button type="submit" class="button primary-button">Save Changes</button>
+                    <button type="reset" class="button secondary-button">Reset</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="tab-content" id="security-tab">
+        <div class="config-section">
+            <h2>Security Settings</h2>
+            <p class="section-description">Authentication and security configuration options.</p>
+            
+            <form id="security-form" class="config-form">
+                <div class="form-group">
+                    <div class="checkbox-control">
+                        <input type="checkbox" id="enable-auth" name="ENABLE_AUTH" {% if config.ENABLE_AUTH %}checked{% endif %}>
+                        <label for="enable-auth">Enable Authentication</label>
+                    </div>
+                    <small class="form-text">Require username and password to access the application</small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="auth-username">Username</label>
+                    <input type="text" id="auth-username" name="AUTH_USERNAME" value="{{ config.AUTH_USERNAME }}" class="form-control" {% if not config.ENABLE_AUTH %}disabled{% endif %}>
+                    <small class="form-text">Username for basic authentication</small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="auth-password">Password</label>
+                    <input type="password" id="auth-password" name="AUTH_PASSWORD" value="{{ config.AUTH_PASSWORD }}" class="form-control" {% if not config.ENABLE_AUTH %}disabled{% endif %}>
+                    <small class="form-text">Password for basic authentication</small>
+                </div>
+                
+                <div class="form-group">
+                    <div class="checkbox-control">
+                        <input type="checkbox" id="auth-required-public" name="AUTH_REQUIRED_FOR_PUBLIC" {% if config.AUTH_REQUIRED_FOR_PUBLIC %}checked{% endif %} {% if not config.ENABLE_AUTH %}disabled{% endif %}>
+                        <label for="auth-required-public">Require Authentication for Public Serving</label>
+                    </div>
+                    <small class="form-text">If public serving is enabled, authentication will be required</small>
+                </div>
+                
+                <div class="form-actions">
+                    <button type="submit" class="button primary-button">Save Changes</button>
+                    <button type="reset" class="button secondary-button">Reset</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="tab-content" id="tasks-tab">
+        <div class="config-section">
+            <h2>Task Management Settings</h2>
+            <p class="section-description">Configuration options for background tasks and job processing.</p>
+            
+            <form id="tasks-form" class="config-form">
+                <div class="form-group">
+                    <label for="max-tasks">Maximum Tasks</label>
+                    <input type="number" id="max-tasks" name="MAX_TASKS" value="{{ config.MAX_TASKS }}" min="1" class="form-control">
+                    <small class="form-text">Maximum number of tasks to store in history</small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="task-cleanup-keep">Tasks to Keep on Cleanup</label>
+                    <input type="number" id="task-cleanup-keep" name="TASK_CLEANUP_KEEP_NEWEST" value="{{ config.TASK_CLEANUP_KEEP_NEWEST }}" min="1" class="form-control">
+                    <small class="form-text">Number of newest tasks to keep when cleaning up</small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="file-max-age">Voice File Maximum Age (Hours)</label>
+                    <input type="number" id="file-max-age" name="VOICE_FILE_MAX_AGE_HOURS" value="{{ config.VOICE_FILE_MAX_AGE_HOURS }}" min="1" class="form-control">
+                    <small class="form-text">Maximum age of generated voice files before cleanup</small>
+                </div>
+                
+                <div class="form-actions">
+                    <button type="submit" class="button primary-button">Save Changes</button>
+                    <button type="reset" class="button secondary-button">Reset</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="tab-content" id="advanced-tab">
+        <div class="config-section">
+            <h2>Advanced Settings</h2>
+            <p class="section-description">Advanced configuration options. Be careful when changing these settings.</p>
+            
+            <div class="warning-banner">
+                <div class="warning-icon">⚠️</div>
+                <div class="warning-text">
+                    <strong>Warning:</strong> Changing these settings can affect system stability. Proceed with caution.
+                </div>
+            </div>
+            
+            <form id="advanced-form" class="config-form">
+                <div class="form-group">
+                    <label for="max-port-attempts">Maximum Port Attempts</label>
+                    <input type="number" id="max-port-attempts" name="MAX_PORT_ATTEMPTS" value="{{ config.MAX_PORT_ATTEMPTS }}" min="1" max="1000" class="form-control">
+                    <small class="form-text">Maximum number of port attempts when binding the server</small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="log-level">Log Level</label>
+                    <select id="log-level" name="LOG_LEVEL" class="form-control">
+                        <option value="DEBUG" {% if config.LOG_LEVEL == "DEBUG" %}selected{% endif %}>Debug</option>
+                        <option value="INFO" {% if config.LOG_LEVEL == "INFO" %}selected{% endif %}>Info</option>
+                        <option value="WARNING" {% if config.LOG_LEVEL == "WARNING" %}selected{% endif %}>Warning</option>
+                        <option value="ERROR" {% if config.LOG_LEVEL == "ERROR" %}selected{% endif %}>Error</option>
+                        <option value="CRITICAL" {% if config.LOG_LEVEL == "CRITICAL" %}selected{% endif %}>Critical</option>
+                    </select>
+                    <small class="form-text">Minimum log level to record</small>
+                </div>
+                
+                <div class="form-group">
+                    <div class="checkbox-control">
+                        <input type="checkbox" id="test-mode" name="ECHOFORGE_TEST" {% if config.ECHOFORGE_TEST == "true" %}checked{% endif %}>
+                        <label for="test-mode">Test Mode</label>
+                    </div>
+                    <small class="form-text">Run the application in test mode (use mock data and bypass authentication)</small>
+                </div>
+                
+                <div class="form-actions">
+                    <button type="submit" class="button primary-button">Save Changes</button>
+                    <button type="reset" class="button secondary-button">Reset</button>
+                </div>
+            </form>
+        </div>
+        
+        <div class="config-section">
+            <h2>Environment Variables</h2>
+            <p class="section-description">Current environment variables affecting the application.</p>
+            
+            <div class="env-table-container">
+                <table class="env-table">
+                    <thead>
+                        <tr>
+                            <th>Variable</th>
+                            <th>Value</th>
+                            <th>Source</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for env in environment_variables %}
+                        <tr>
+                            <td>{{ env.name }}</td>
+                            <td>{{ env.value }}</td>
+                            <td>{{ env.source }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Restart Confirmation Modal -->
+<div id="restart-modal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>Restart Required</h2>
+            <button class="close-modal">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="warning-message">
+                <div class="warning-icon">⚠️</div>
+                <div class="warning-text">
+                    <p><strong>Warning:</strong> Some of the changes you made require restarting the server to take effect.</p>
+                    <p>Would you like to restart the server now?</p>
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button id="restart-later-btn" class="button secondary-button">Later</button>
+            <button id="restart-now-btn" class="button primary-button">Restart Now</button>
+        </div>
+    </div>
+</div>
+{% endblock %} 

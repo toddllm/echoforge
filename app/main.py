@@ -8,6 +8,7 @@ It handles startup and shutdown tasks like loading models and cleaning old files
 import os
 import logging
 from pathlib import Path
+from contextlib import asynccontextmanager
 
 # Load environment variables before importing other modules
 from app.core.env_loader import load_env_files
@@ -23,6 +24,7 @@ from app.core import config
 from app.core.auth import auth_required
 from app.api.router import router as api_router
 from app.ui.routes import router as ui_router
+from app.api.admin import router as admin_router
 
 # Setup logging
 logging.basicConfig(
@@ -34,11 +36,55 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Define lifespan context manager
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Lifespan context manager for FastAPI application.
+    Handles startup and shutdown events.
+    """
+    # Startup
+    logger.info("Starting EchoForge application")
+    
+    # Don't attempt to load models in test mode
+    if os.environ.get("ECHOFORGE_TEST") == "true":
+        logger.info("Test mode detected - skipping model loading")
+    else:
+        # In production mode, try to load models
+        try:
+            # Import here to avoid circular imports
+            from app.api.voice_generator import voice_generator
+            
+            # Initialize voice generator
+            if voice_generator:
+                logger.info("Initializing voice generator")
+                voice_generator.initialize()
+        except Exception as e:
+            logger.error(f"Error initializing voice generator: {str(e)}")
+    
+    # Yield control back to FastAPI
+    yield
+    
+    # Shutdown
+    logger.info("Shutting down EchoForge application")
+    
+    # Clean up old files
+    try:
+        # Import here to avoid circular imports
+        from app.core.task_manager import task_manager
+        
+        if task_manager:
+            logger.info("Cleaning up old tasks")
+            task_manager.cleanup_old_tasks()
+    except Exception as e:
+        logger.error(f"Error during shutdown cleanup: {str(e)}")
+
 # Create the FastAPI app
 app = FastAPI(
     title=config.APP_NAME,
     description=config.APP_DESCRIPTION,
-    version=config.APP_VERSION
+    version=config.APP_VERSION,
+    lifespan=lifespan
 )
 
 # Add CORS middleware
@@ -75,6 +121,9 @@ app.include_router(api_router)
 
 # Include UI routes
 app.include_router(ui_router)
+
+# Include Admin API routes
+app.include_router(admin_router)
 
 # Try to mount voice files directory
 try:
@@ -142,22 +191,4 @@ async def general_exception_handler(request: Request, exc: Exception):
     return JSONResponse(
         status_code=500,
         content={"detail": "Internal server error", "message": str(exc)},
-    )
-
-# App events
-@app.on_event("startup")
-async def startup_event():
-    """Application startup handler."""
-    logger.info("Starting EchoForge application")
-    
-    # Don't attempt to load models in test mode
-    if os.environ.get("ECHOFORGE_TEST") == "true":
-        logger.info("Test mode - skipping model loading")
-        return
-    
-    # The remaining startup code is removed for simplicity
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Application shutdown handler."""
-    logger.info("Shutting down EchoForge application") 
+    ) 

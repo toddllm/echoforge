@@ -18,6 +18,17 @@ logger = logging.getLogger(__name__)
 # Initialize HTTP Basic Auth
 security = HTTPBasic()
 
+# Create a test-mode version of HTTPBasic that bypasses authentication
+class TestHTTPBasic(HTTPBasic):
+    async def __call__(self, request: Request) -> HTTPBasicCredentials:
+        if os.environ.get("ECHOFORGE_TEST") == "true":
+            logger.info("Test mode - bypassing credential verification")
+            # Create a mock credentials object
+            return HTTPBasicCredentials(username="test_user", password="test_password")
+        return await super().__call__(request)
+
+# Use the test-aware security class
+security = TestHTTPBasic()
 
 def verify_credentials(credentials: HTTPBasicCredentials = Depends(security)):
     """Verify HTTP Basic Auth credentials."""
@@ -25,7 +36,8 @@ def verify_credentials(credentials: HTTPBasicCredentials = Depends(security)):
     if os.environ.get("ECHOFORGE_TEST") == "true":
         logger.info("Test mode - bypassing credential verification")
         return "test_user"
-        
+    
+    # For non-test mode, verify credentials
     correct_username = secrets.compare_digest(credentials.username, config.AUTH_USERNAME)
     correct_password = secrets.compare_digest(credentials.password, config.AUTH_PASSWORD)
     

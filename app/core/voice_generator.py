@@ -70,6 +70,7 @@ class VoiceGenerator:
         )
         
         # Set up device
+        self.requested_device = device
         if device == "auto":
             self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         else:
@@ -168,7 +169,11 @@ class VoiceGenerator:
             )
             
             # Load weights from checkpoint
-            checkpoint = torch.load(self.model_path, map_location=self.device)
+            if self.device.type == 'cuda':
+                checkpoint = torch.load(self.model_path, map_location=self.device)
+            else:
+                # When loading on CPU, use map_location to avoid CUDA errors
+                checkpoint = torch.load(self.model_path, map_location='cpu')
             
             # For now, just log the checkpoint info - we'll implement proper loading later
             # as there might be differences in state dict keys
@@ -180,10 +185,29 @@ class VoiceGenerator:
             logger.info(f"Model loaded successfully")
             logger.info(f"Model configuration: backbone={self.backbone_flavor}, decoder={self.decoder_flavor}")
             logger.info(f"Audio config: vocab_size={self.audio_vocab_size}, codebooks={self.audio_num_codebooks}")
+            logger.info(f"Using device: {self.device.type}")
             
         except Exception as e:
             logger.error(f"Failed to load model: {e}")
-            raise RuntimeError(f"Failed to load TTS model: {e}")
+            if self.device.type == 'cuda' and self.requested_device != 'cpu':
+                logger.info("Attempting to fall back to CPU")
+                self.device = torch.device('cpu')
+                try:
+                    # Try loading on CPU instead
+                    self.model = create_model(
+                        backbone_flavor=self.backbone_flavor,
+                        decoder_flavor=self.decoder_flavor,
+                        audio_vocab_size=self.audio_vocab_size,
+                        audio_num_codebooks=self.audio_num_codebooks,
+                        device='cpu'
+                    )
+                    checkpoint = torch.load(self.model_path, map_location='cpu')
+                    logger.info(f"Model loaded successfully on CPU as fallback")
+                except Exception as cpu_e:
+                    logger.error(f"Failed to load model on CPU fallback: {cpu_e}")
+                    raise RuntimeError(f"Failed to load TTS model on any device: {e}, CPU fallback: {cpu_e}")
+            else:
+                raise RuntimeError(f"Failed to load TTS model: {e}")
     
     def _tokenize_text(self, text: str) -> torch.Tensor:
         """
@@ -247,7 +271,8 @@ class VoiceGenerator:
         temperature: float = 0.5,
         top_k: int = 50,
         max_audio_len: int = 1024,
-        style: Optional[str] = None
+        style: Optional[str] = None,
+        device: Optional[str] = None
     ) -> Union[torch.Tensor, bytes]:
         """
         Generate speech from text.
@@ -259,6 +284,7 @@ class VoiceGenerator:
             top_k: Top-k for generation sampling
             max_audio_len: Maximum audio length to generate in tokens
             style: Optional style descriptor (e.g., "happy", "sad", etc.)
+            device: Optional device override ("auto", "cuda", "cpu")
             
         Returns:
             Audio waveform as a tensor or bytes
@@ -279,30 +305,82 @@ class VoiceGenerator:
         if top_k < 1:
             raise ValueError("top_k must be at least 1")
         
+        # Handle device override
+        current_device = self.device
+        if device is not None and device != "auto" and device != str(self.device.type):
+            logger.info(f"Device override requested: {device}")
+            if device == "cpu":
+                # Always allow switching to CPU
+                self.device = torch.device("cpu")
+                logger.info(f"Switched to CPU as requested")
+            elif device == "cuda" and torch.cuda.is_available():
+                # Only switch to CUDA if available
+                self.device = torch.device("cuda")
+                logger.info(f"Switched to CUDA as requested")
+            else:
+                logger.warning(f"Requested device {device} not available, staying with {self.device.type}")
+        
         # Log generation parameters
         logger.info(f"Generating speech for text: '{text}'")
-        logger.info(f"Parameters: speaker_id={speaker_id}, temperature={temperature}, top_k={top_k}")
+        logger.info(f"Parameters: speaker_id={speaker_id}, temperature={temperature}, top_k={top_k}, device={self.device.type}")
         if style:
             logger.info(f"Style: {style}")
         
-        # Tokenize input text
-        token_ids = self._tokenize_text(text)
-        
-        # Generate audio tokens
-        with torch.no_grad():
-            audio_tokens = self.model.generate(
-                token_ids,
-                max_audio_len=max_audio_len,
-                temperature=temperature,
-                top_k=top_k
-            )
-        
-        # Convert tokens to audio waveform
-        waveform = self._decode_audio_tokens(audio_tokens)
-        
-        logger.info(f"Generated audio of length {waveform.shape[1] / self.sample_rate:.2f} seconds")
-        
-        return waveform
+        try:
+            # Tokenize input text
+            token_ids = self._tokenize_text(text)
+            
+            # Generate audio tokens
+            with torch.no_grad():
+                audio_tokens = self.model.generate(
+                    token_ids,
+                    max_audio_len=max_audio_len,
+                    temperature=temperature,
+                    top_k=top_k
+                )
+            
+            # Convert tokens to audio waveform
+            waveform = self._decode_audio_tokens(audio_tokens)
+            
+            logger.info(f"Generated audio of length {waveform.shape[1] / self.sample_rate:.2f} seconds")
+            
+            return waveform
+            
+        except Exception as e:
+            logger.error(f"Error during generation: {e}")
+            
+            # If we're on CUDA and encounter an error, try falling back to CPU
+            if self.device.type == "cuda" and device != "cpu":
+                logger.info("Attempting to fall back to CPU after CUDA error")
+                try:
+                    # Switch to CPU
+                    self.device = torch.device("cpu")
+                    
+                    # Tokenize input text again
+                    token_ids = self._tokenize_text(text)
+                    
+                    # Generate audio tokens on CPU
+                    with torch.no_grad():
+                        audio_tokens = self.model.generate(
+                            token_ids,
+                            max_audio_len=max_audio_len,
+                            temperature=temperature,
+                            top_k=top_k
+                        )
+                    
+                    # Convert tokens to audio waveform
+                    waveform = self._decode_audio_tokens(audio_tokens)
+                    
+                    logger.info(f"Successfully generated audio on CPU fallback, length {waveform.shape[1] / self.sample_rate:.2f} seconds")
+                    
+                    return waveform
+                except Exception as cpu_e:
+                    logger.error(f"CPU fallback also failed: {cpu_e}")
+                    # Restore original device
+                    self.device = current_device
+                    raise ValueError(f"Voice generation failed on both devices: {e}, CPU fallback: {cpu_e}")
+            
+            raise ValueError(f"Voice generation failed: {e}")
     
     def save_audio(self, waveform: torch.Tensor, file_path: str) -> str:
         """

@@ -53,11 +53,35 @@ class VoiceGenerator:
         logger.info("VoiceGenerator initialized with model_path=%s, output_dir=%s", 
                    model_path, output_dir)
     
+    def initialize(self, device: str = None) -> bool:
+        """
+        Initialize the voice generator by loading the model.
+        
+        This is an alias for load_model for compatibility.
+        
+        Args:
+            device: Device to use for inference ('auto', 'cuda', or 'cpu')
+            
+        Returns:
+            bool: True if model was loaded successfully, False otherwise
+        """
+        return self.load_model(device)
+    
+    def is_initialized(self) -> bool:
+        """
+        Check if the model is initialized.
+        
+        Returns:
+            bool: True if model is loaded, False otherwise
+        """
+        return self.model is not None
+    
     def load_model(self, device: str = None) -> bool:
         """
         Load the voice generation model.
         
-        Attempts to load the CSM model with proper fallback mechanisms.
+        Attempts to load the CSM model. Will try CUDA if available, then fall back to CPU if needed.
+        Will not use a placeholder model.
         
         Args:
             device: Device to use for inference ('auto', 'cuda', or 'cpu')
@@ -89,24 +113,38 @@ class VoiceGenerator:
                     device = "cpu"
                 logger.info(f"Using explicitly requested device: {device}")
             
-            # Create the CSM model
+            # Create the CSM model - never use placeholder
             self.model = create_csm_model(
                 model_path=self.model_path,
                 device=device,
-                use_placeholder=self.use_placeholder
+                use_placeholder=False  # Never use placeholder
             )
             
-            # Check if we got a placeholder model
-            if isinstance(self.model, PlaceholderCSMModel):
-                logger.warning("Using placeholder CSM model - real model not available")
-            else:
-                logger.info("CSM model loaded successfully on device: %s", device)
-                
+            logger.info("CSM model loaded successfully on device: %s", device)
             return True
             
         except Exception as e:
-            logger.error("Could not load CSM model: %s", str(e))
-            return False
+            logger.error("Failed to load CSM model on %s: %s", device, str(e))
+            
+            # If CUDA failed and we weren't explicitly asked for CPU, try CPU
+            if device != "cpu" and (device == "cuda" or device == "auto"):
+                logger.info("Attempting to load model on CPU as fallback")
+                try:
+                    # Try loading on CPU instead
+                    self.model = create_csm_model(
+                        model_path=self.model_path,
+                        device="cpu",
+                        use_placeholder=False  # Never use placeholder
+                    )
+                    logger.info("CSM model loaded successfully on CPU")
+                    return True
+                except Exception as cpu_e:
+                    logger.error("Failed to load CSM model on CPU fallback: %s", str(cpu_e))
+                    # Both GPU and CPU failed, just fail
+                    raise RuntimeError(f"Could not load CSM model on any device")
+            
+            # If we requested CPU specifically and it failed, or if we've already tried fallback, just fail
+            raise RuntimeError(f"Could not load CSM model: {e}")
     
     def _determine_device(self) -> str:
         """
@@ -182,6 +220,7 @@ class VoiceGenerator:
                 speaker_id=speaker_id,
                 temperature=temperature,
                 top_k=top_k,
+                device=device
             )
             
             # Save the audio
@@ -202,9 +241,69 @@ class VoiceGenerator:
             
         except CSMModelError as e:
             logger.error(f"CSM model error: {e}")
+            # Try again with CPU if we were using CUDA and it failed
+            if device == "cuda" or device == "auto":
+                logger.info("Attempting to fall back to CPU after CUDA error")
+                try:
+                    # Generate speech on CPU
+                    audio, sample_rate = self.model.generate_speech(
+                        text=text,
+                        speaker_id=speaker_id,
+                        temperature=temperature,
+                        top_k=top_k,
+                        device="cpu"
+                    )
+                    
+                    # Save the audio
+                    self.model.save_audio(audio, sample_rate, output_path)
+                    
+                    # Check if file was created
+                    if not os.path.exists(output_path):
+                        logger.error(f"Output file not created during CPU fallback: {output_path}")
+                        return None, None
+                    
+                    # Create URL for accessing the file
+                    relative_path = os.path.relpath(output_path, self.output_dir)
+                    url = f"/voices/{relative_path}"
+                    
+                    logger.info(f"Voice generated successfully on CPU fallback: {output_path}")
+                    return output_path, url
+                except Exception as cpu_e:
+                    logger.error(f"CPU fallback also failed: {cpu_e}")
+                    return None, None
             return None, None
         except Exception as e:
             logger.error(f"Error generating voice: {e}")
+            # Try again with CPU if we were using CUDA and it failed
+            if device == "cuda" or device == "auto":
+                logger.info("Attempting to fall back to CPU after error")
+                try:
+                    # Generate speech on CPU
+                    audio, sample_rate = self.model.generate_speech(
+                        text=text,
+                        speaker_id=speaker_id,
+                        temperature=temperature,
+                        top_k=top_k,
+                        device="cpu"
+                    )
+                    
+                    # Save the audio
+                    self.model.save_audio(audio, sample_rate, output_path)
+                    
+                    # Check if file was created
+                    if not os.path.exists(output_path):
+                        logger.error(f"Output file not created during CPU fallback: {output_path}")
+                        return None, None
+                    
+                    # Create URL for accessing the file
+                    relative_path = os.path.relpath(output_path, self.output_dir)
+                    url = f"/voices/{relative_path}"
+                    
+                    logger.info(f"Voice generated successfully on CPU fallback: {output_path}")
+                    return output_path, url
+                except Exception as cpu_e:
+                    logger.error(f"CPU fallback also failed: {cpu_e}")
+                    return None, None
             return None, None
     
     def list_available_voices(self) -> List[Dict[str, Any]]:

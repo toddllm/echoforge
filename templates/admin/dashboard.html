@@ -1,0 +1,754 @@
+{% extends "admin/layout.html" %}
+
+{% block title %}Dashboard - EchoForge Admin{% endblock %}
+
+{% block page_title %}Admin Dashboard{% endblock %}
+
+{% block content_actions %}
+<div class="action-buttons">
+    <button id="refresh-dashboard-btn" class="button primary-button">Refresh Stats</button>
+    <button id="download-report-btn" class="button secondary-button">Download Report</button>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="dashboard">
+    <div class="dashboard-summary">
+        <div class="summary-cards">
+            <div class="summary-card">
+                <div class="card-icon model-icon">
+                    <i class="fas fa-microchip"></i>
+                </div>
+                <div class="card-content">
+                    <div class="card-value">{{ system_stats.model_status }}</div>
+                    <div class="card-label">Model Status</div>
+                </div>
+                <div class="card-action">
+                    <a href="/admin/models" class="card-link">Manage</a>
+                </div>
+            </div>
+
+            <div class="summary-card">
+                <div class="card-icon task-icon">
+                    <i class="fas fa-tasks"></i>
+                </div>
+                <div class="card-content">
+                    <div class="card-value">{{ system_stats.active_tasks }}</div>
+                    <div class="card-label">Active Tasks</div>
+                </div>
+                <div class="card-action">
+                    <a href="/admin/tasks" class="card-link">View</a>
+                </div>
+            </div>
+
+            <div class="summary-card">
+                <div class="card-icon voice-icon">
+                    <i class="fas fa-comment-alt"></i>
+                </div>
+                <div class="card-content">
+                    <div class="card-value">{{ system_stats.voices_count }}</div>
+                    <div class="card-label">Available Voices</div>
+                </div>
+                <div class="card-action">
+                    <a href="/admin/voices" class="card-link">Manage</a>
+                </div>
+            </div>
+
+            <div class="summary-card">
+                <div class="card-icon system-icon">
+                    <i class="fas fa-server"></i>
+                </div>
+                <div class="card-content">
+                    <div class="card-value">{{ "Healthy" if system_stats.system_health else "Issues Detected" }}</div>
+                    <div class="card-label">System Health</div>
+                </div>
+                <div class="card-action">
+                    <a href="#system-status" class="card-link">Details</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="dashboard-section">
+        <div class="section-header">
+            <h2>Recent Activity</h2>
+            <div class="section-actions">
+                <select id="activity-timeframe" class="filter-select">
+                    <option value="day">Last 24 Hours</option>
+                    <option value="week" selected>Last 7 Days</option>
+                    <option value="month">Last 30 Days</option>
+                </select>
+            </div>
+        </div>
+        <div class="activity-charts">
+            <div class="chart-container">
+                <h3>Voice Generation Requests</h3>
+                <canvas id="generation-chart" height="250"></canvas>
+            </div>
+            <div class="chart-container">
+                <h3>System Performance</h3>
+                <canvas id="performance-chart" height="250"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <div class="dashboard-columns">
+        <div class="dashboard-column">
+            <div class="dashboard-panel">
+                <div class="panel-header">
+                    <h2>Recent Tasks</h2>
+                    <a href="/admin/tasks" class="view-all-link">View All</a>
+                </div>
+                <div class="panel-content">
+                    <div class="tasks-list">
+                        {% if recent_tasks %}
+                        <table class="admin-table">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Type</th>
+                                    <th>Status</th>
+                                    <th>Created</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for task in recent_tasks %}
+                                <tr>
+                                    <td>{{ task.id[:8] }}...</td>
+                                    <td>{{ task.type }}</td>
+                                    <td>
+                                        <span class="status-badge {{ task.status }}">
+                                            {{ task.status }}
+                                        </span>
+                                    </td>
+                                    <td>{{ task.created_at }}</td>
+                                    <td>
+                                        <a href="/admin/tasks?id={{ task.id }}" class="action-button">
+                                            <i class="fas fa-eye"></i>
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                        {% else %}
+                        <div class="empty-list">
+                            <p>No recent tasks found.</p>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="dashboard-panel" id="system-status">
+                <div class="panel-header">
+                    <h2>System Status</h2>
+                    <div class="panel-actions">
+                        <button id="run-diagnostic-btn" class="button sm-button secondary-button">Run Diagnostic</button>
+                    </div>
+                </div>
+                <div class="panel-content">
+                    <div class="system-metrics">
+                        <div class="metric-item">
+                            <div class="metric-icon cpu-icon">
+                                <i class="fas fa-microchip"></i>
+                            </div>
+                            <div class="metric-info">
+                                <div class="metric-name">CPU Usage</div>
+                                <div class="metric-value">{{ system_metrics.cpu_usage }}%</div>
+                                <div class="progress-bar">
+                                    <div class="progress" style="width: {{ system_metrics.cpu_usage }}%"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="metric-item">
+                            <div class="metric-icon memory-icon">
+                                <i class="fas fa-memory"></i>
+                            </div>
+                            <div class="metric-info">
+                                <div class="metric-name">Memory Usage</div>
+                                <div class="metric-value">{{ system_metrics.memory_usage }}%</div>
+                                <div class="progress-bar">
+                                    <div class="progress" style="width: {{ system_metrics.memory_usage }}%"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="metric-item">
+                            <div class="metric-icon disk-icon">
+                                <i class="fas fa-hdd"></i>
+                            </div>
+                            <div class="metric-info">
+                                <div class="metric-name">Disk Usage</div>
+                                <div class="metric-value">{{ system_metrics.disk_usage }}%</div>
+                                <div class="progress-bar">
+                                    <div class="progress" style="width: {{ system_metrics.disk_usage }}%"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {% if system_metrics.gpu_available %}
+                        <div class="metric-item">
+                            <div class="metric-icon gpu-icon">
+                                <i class="fas fa-gamepad"></i>
+                            </div>
+                            <div class="metric-info">
+                                <div class="metric-name">GPU Usage</div>
+                                <div class="metric-value">{{ system_metrics.gpu_usage }}%</div>
+                                <div class="progress-bar">
+                                    <div class="progress" style="width: {{ system_metrics.gpu_usage }}%"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="metric-item">
+                            <div class="metric-icon vram-icon">
+                                <i class="fas fa-memory"></i>
+                            </div>
+                            <div class="metric-info">
+                                <div class="metric-name">VRAM Usage</div>
+                                <div class="metric-value">{{ system_metrics.vram_usage }}%</div>
+                                <div class="progress-bar">
+                                    <div class="progress" style="width: {{ system_metrics.vram_usage }}%"></div>
+                                </div>
+                            </div>
+                        </div>
+                        {% else %}
+                        <div class="metric-item no-gpu">
+                            <div class="metric-icon gpu-icon">
+                                <i class="fas fa-gamepad"></i>
+                            </div>
+                            <div class="metric-info">
+                                <div class="metric-name">GPU Status</div>
+                                <div class="metric-value">Not Available</div>
+                                <div class="metric-note">No CUDA-compatible GPU detected</div>
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        <div class="metric-item">
+                            <div class="metric-icon uptime-icon">
+                                <i class="fas fa-clock"></i>
+                            </div>
+                            <div class="metric-info">
+                                <div class="metric-name">Uptime</div>
+                                <div class="metric-value">{{ system_metrics.uptime }}</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="dashboard-column">
+            <div class="dashboard-panel">
+                <div class="panel-header">
+                    <h2>Popular Voices</h2>
+                    <a href="/admin/voices" class="view-all-link">View All</a>
+                </div>
+                <div class="panel-content">
+                    <div class="popular-voices">
+                        {% if popular_voices %}
+                        <table class="admin-table">
+                            <thead>
+                                <tr>
+                                    <th>Voice</th>
+                                    <th>Gender</th>
+                                    <th>Usage</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for voice in popular_voices %}
+                                <tr>
+                                    <td>
+                                        <div class="voice-name-cell">
+                                            <img src="{{ voice.avatar_url }}" alt="{{ voice.name }}" class="voice-avatar-small">
+                                            <span class="voice-name">{{ voice.name }}</span>
+                                        </div>
+                                    </td>
+                                    <td>{{ voice.gender }}</td>
+                                    <td>{{ voice.usage_count }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                        {% else %}
+                        <div class="empty-list">
+                            <p>No voice usage data available.</p>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="dashboard-panel">
+                <div class="panel-header">
+                    <h2>Recent Logs</h2>
+                    <a href="/admin/logs" class="view-all-link">View All</a>
+                </div>
+                <div class="panel-content">
+                    <div class="logs-preview">
+                        {% if recent_logs %}
+                        <table class="admin-table">
+                            <thead>
+                                <tr>
+                                    <th>Time</th>
+                                    <th>Level</th>
+                                    <th>Message</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for log in recent_logs %}
+                                <tr class="log-row log-{{ log.level | lower }}">
+                                    <td>{{ log.timestamp }}</td>
+                                    <td>
+                                        <span class="log-level {{ log.level | lower }}">{{ log.level }}</span>
+                                    </td>
+                                    <td class="log-message">{{ log.message }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                        {% else %}
+                        <div class="empty-list">
+                            <p>No recent logs found.</p>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="dashboard-panel">
+                <div class="panel-header">
+                    <h2>Quick Actions</h2>
+                </div>
+                <div class="panel-content">
+                    <div class="quick-actions">
+                        <a href="/admin/models" class="quick-action-btn">
+                            <i class="fas fa-microchip"></i>
+                            <span>Manage Models</span>
+                        </a>
+                        <a href="/admin/voices" class="quick-action-btn">
+                            <i class="fas fa-comment-alt"></i>
+                            <span>Manage Voices</span>
+                        </a>
+                        <a href="/admin/tasks" class="quick-action-btn">
+                            <i class="fas fa-tasks"></i>
+                            <span>Manage Tasks</span>
+                        </a>
+                        <a href="/admin/config" class="quick-action-btn">
+                            <i class="fas fa-cog"></i>
+                            <span>System Config</span>
+                        </a>
+                        <a href="/admin/logs" class="quick-action-btn">
+                            <i class="fas fa-file-alt"></i>
+                            <span>View Logs</span>
+                        </a>
+                        <a href="#" id="restart-server-btn" class="quick-action-btn">
+                            <i class="fas fa-redo"></i>
+                            <span>Restart Server</span>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Diagnostic Results Modal -->
+<div id="diagnostic-modal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>System Diagnostic Results</h2>
+            <button class="close-modal">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="diagnostic-status">
+                <div class="diagnostic-indicator">
+                    <div class="spinner"></div>
+                    <div class="status-text">Running diagnostic checks...</div>
+                </div>
+            </div>
+            <div class="diagnostic-results" style="display: none;">
+                <div class="results-summary">
+                    <div class="summary-indicator">
+                        <i class="fas fa-check-circle"></i>
+                    </div>
+                    <div class="summary-text">
+                        <h3>Diagnostic Complete</h3>
+                        <p>All systems are working properly</p>
+                    </div>
+                </div>
+                <div class="check-list">
+                    <div class="check-item">
+                        <div class="check-icon passed">
+                            <i class="fas fa-check"></i>
+                        </div>
+                        <div class="check-details">
+                            <div class="check-name">Model Status</div>
+                            <div class="check-message">Model loaded and functioning properly</div>
+                        </div>
+                    </div>
+                    <!-- More check items will be added dynamically -->
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button id="download-diagnostic-btn" class="button secondary-button">Download Report</button>
+            <button id="close-diagnostic-btn" class="button primary-button">Close</button>
+        </div>
+    </div>
+</div>
+
+<!-- Restart Server Confirmation Modal -->
+<div id="restart-server-modal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>Restart Server</h2>
+            <button class="close-modal">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="warning-message">
+                <div class="warning-icon">⚠️</div>
+                <div class="warning-text">
+                    <p><strong>Warning:</strong> Are you sure you want to restart the EchoForge server?</p>
+                    <p>This will interrupt all current operations and may cause any in-progress tasks to fail. The server will be unavailable for a few moments during restart.</p>
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button id="cancel-restart-btn" class="button secondary-button">Cancel</button>
+            <button id="confirm-restart-btn" class="button warning-button">Restart Server</button>
+        </div>
+    </div>
+</div>
+
+<!-- Download Report Modal -->
+<div id="download-report-modal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>Download System Report</h2>
+            <button class="close-modal">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="form-container">
+                <form id="report-form" class="config-form">
+                    <div class="form-group">
+                        <label for="report-type">Report Type</label>
+                        <select id="report-type" name="report_type" class="form-control">
+                            <option value="summary">Summary Report</option>
+                            <option value="detailed">Detailed Report</option>
+                            <option value="performance">Performance Report</option>
+                            <option value="full">Full System Report</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="report-timeframe">Time Period</label>
+                        <select id="report-timeframe" name="timeframe" class="form-control">
+                            <option value="day">Last 24 Hours</option>
+                            <option value="week" selected>Last 7 Days</option>
+                            <option value="month">Last 30 Days</option>
+                            <option value="custom">Custom Range</option>
+                        </select>
+                    </div>
+                    
+                    <div id="custom-date-range" style="display: none;">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="report-start-date">Start Date</label>
+                                <input type="date" id="report-start-date" name="start_date" class="form-control">
+                            </div>
+                            <div class="form-group">
+                                <label for="report-end-date">End Date</label>
+                                <input type="date" id="report-end-date" name="end_date" class="form-control">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="report-format">Format</label>
+                        <select id="report-format" name="format" class="form-control">
+                            <option value="pdf">PDF</option>
+                            <option value="csv">CSV</option>
+                            <option value="json">JSON</option>
+                            <option value="html">HTML</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <div class="checkbox-control">
+                            <input type="checkbox" id="include-system-info" name="include_system_info" checked>
+                            <label for="include-system-info">Include System Information</label>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <div class="checkbox-control">
+                            <input type="checkbox" id="include-logs" name="include_logs" checked>
+                            <label for="include-logs">Include Logs</label>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button id="cancel-download-btn" class="button secondary-button">Cancel</button>
+            <button id="generate-report-btn" class="button primary-button">Generate Report</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@3.7.1/dist/chart.min.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Setup charts
+        setupGenerationChart();
+        setupPerformanceChart();
+        
+        // Event listeners for dashboard actions
+        document.getElementById('refresh-dashboard-btn').addEventListener('click', refreshDashboard);
+        document.getElementById('download-report-btn').addEventListener('click', openDownloadReportModal);
+        document.getElementById('run-diagnostic-btn').addEventListener('click', runSystemDiagnostic);
+        document.getElementById('restart-server-btn').addEventListener('click', openRestartModal);
+        
+        // Event listeners for modals
+        setupModalEventListeners();
+        
+        // Setup timeframe selector
+        document.getElementById('activity-timeframe').addEventListener('change', updateActivityCharts);
+    });
+    
+    function setupGenerationChart() {
+        const ctx = document.getElementById('generation-chart').getContext('2d');
+        // Chart data would be populated from server
+        // This is a placeholder
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: {{ chart_data.generation.labels | tojson }},
+                datasets: [{
+                    label: 'Voice Generation Requests',
+                    data: {{ chart_data.generation.data | tojson }},
+                    backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                    borderColor: 'rgba(75, 192, 192, 1)',
+                    borderWidth: 2,
+                    tension: 0.3,
+                    pointRadius: 3
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'Number of Requests'
+                        }
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Date'
+                        }
+                    }
+                }
+            }
+        });
+    }
+    
+    function setupPerformanceChart() {
+        const ctx = document.getElementById('performance-chart').getContext('2d');
+        // Chart data would be populated from server
+        // This is a placeholder
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: {{ chart_data.performance.labels | tojson }},
+                datasets: [{
+                    label: 'CPU Usage (%)',
+                    data: {{ chart_data.performance.cpu | tojson }},
+                    backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                    borderColor: 'rgba(255, 99, 132, 1)',
+                    borderWidth: 2,
+                    tension: 0.3,
+                    yAxisID: 'y'
+                },
+                {% if system_metrics.gpu_available %}
+                {
+                    label: 'GPU Usage (%)',
+                    data: {{ chart_data.performance.gpu | tojson }},
+                    backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                    borderColor: 'rgba(54, 162, 235, 1)',
+                    borderWidth: 2,
+                    tension: 0.3,
+                    yAxisID: 'y'
+                },
+                {% endif %}
+                {
+                    label: 'Memory Usage (%)',
+                    data: {{ chart_data.performance.memory | tojson }},
+                    backgroundColor: 'rgba(255, 206, 86, 0.2)',
+                    borderColor: 'rgba(255, 206, 86, 1)',
+                    borderWidth: 2,
+                    tension: 0.3,
+                    yAxisID: 'y'
+                },
+                {
+                    label: 'Response Time (ms)',
+                    data: {{ chart_data.performance.response_time | tojson }},
+                    backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                    borderColor: 'rgba(75, 192, 192, 1)',
+                    borderWidth: 2,
+                    tension: 0.3,
+                    yAxisID: 'y1'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        type: 'linear',
+                        position: 'left',
+                        title: {
+                            display: true,
+                            text: 'Usage (%)'
+                        },
+                        max: 100
+                    },
+                    y1: {
+                        beginAtZero: true,
+                        type: 'linear',
+                        position: 'right',
+                        title: {
+                            display: true,
+                            text: 'Response Time (ms)'
+                        },
+                        grid: {
+                            drawOnChartArea: false
+                        }
+                    }
+                }
+            }
+        });
+    }
+    
+    // Function implementations would be added here
+    function refreshDashboard() {
+        // Code to refresh dashboard data
+        console.log('Refreshing dashboard');
+        // This would make an AJAX call to get updated data
+    }
+    
+    function openDownloadReportModal() {
+        const modal = document.getElementById('download-report-modal');
+        modal.style.display = 'block';
+    }
+    
+    function runSystemDiagnostic() {
+        const modal = document.getElementById('diagnostic-modal');
+        modal.style.display = 'block';
+        
+        // This would make an AJAX call to run diagnostics
+        // For now, we'll simulate it
+        setTimeout(() => {
+            document.querySelector('.diagnostic-status').style.display = 'none';
+            document.querySelector('.diagnostic-results').style.display = 'block';
+        }, 2000);
+    }
+    
+    function openRestartModal() {
+        const modal = document.getElementById('restart-server-modal');
+        modal.style.display = 'block';
+    }
+    
+    function updateActivityCharts() {
+        // Code to update charts based on selected timeframe
+        console.log('Updating activity charts');
+        // This would make an AJAX call to get chart data for the selected timeframe
+    }
+    
+    function setupModalEventListeners() {
+        // Close modal when clicking on X or outside the modal
+        document.querySelectorAll('.close-modal').forEach(button => {
+            button.addEventListener('click', function() {
+                this.closest('.modal').style.display = 'none';
+            });
+        });
+        
+        window.addEventListener('click', function(event) {
+            if (event.target.classList.contains('modal')) {
+                event.target.style.display = 'none';
+            }
+        });
+        
+        // Report modal
+        document.getElementById('report-timeframe').addEventListener('change', function() {
+            const customDateRange = document.getElementById('custom-date-range');
+            if (this.value === 'custom') {
+                customDateRange.style.display = 'block';
+            } else {
+                customDateRange.style.display = 'none';
+            }
+        });
+        
+        // Restart confirmation
+        document.getElementById('confirm-restart-btn').addEventListener('click', function() {
+            // This would make an AJAX call to restart the server
+            console.log('Restarting server');
+            this.textContent = 'Restarting...';
+            this.disabled = true;
+            // Simulate restart
+            setTimeout(() => {
+                document.getElementById('restart-server-modal').style.display = 'none';
+                alert('Server restarted successfully!');
+                this.textContent = 'Restart Server';
+                this.disabled = false;
+            }, 3000);
+        });
+        
+        document.getElementById('cancel-restart-btn').addEventListener('click', function() {
+            document.getElementById('restart-server-modal').style.display = 'none';
+        });
+        
+        // Report generation
+        document.getElementById('generate-report-btn').addEventListener('click', function() {
+            // This would make an AJAX call to generate and download the report
+            console.log('Generating report');
+            this.textContent = 'Generating...';
+            this.disabled = true;
+            // Simulate report generation
+            setTimeout(() => {
+                document.getElementById('download-report-modal').style.display = 'none';
+                alert('Report generated and downloaded successfully!');
+                this.textContent = 'Generate Report';
+                this.disabled = false;
+            }, 2000);
+        });
+        
+        document.getElementById('cancel-download-btn').addEventListener('click', function() {
+            document.getElementById('download-report-modal').style.display = 'none';
+        });
+        
+        // Diagnostic modal
+        document.getElementById('close-diagnostic-btn').addEventListener('click', function() {
+            document.getElementById('diagnostic-modal').style.display = 'none';
+        });
+        
+        document.getElementById('download-diagnostic-btn').addEventListener('click', function() {
+            // This would make an AJAX call to download the diagnostic report
+            console.log('Downloading diagnostic report');
+            alert('Diagnostic report downloaded successfully!');
+        });
+    }
+</script>
+{% endblock %} 

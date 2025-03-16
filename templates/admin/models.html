@@ -1,0 +1,396 @@
+{% extends "admin/layout.html" %}
+
+{% block title %}Models - EchoForge Admin{% endblock %}
+
+{% block page_title %}Model Management{% endblock %}
+
+{% block content_actions %}
+<div class="action-buttons">
+    <button id="model-scan-btn" class="button primary-button">Scan for Models</button>
+    <button id="model-download-btn" class="button secondary-button">Download New Model</button>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="model-management">
+    <div class="model-filters">
+        <div class="search-container">
+            <input type="text" id="model-search" placeholder="Search models..." class="search-box">
+            <button id="search-btn" class="search-button">
+                <i class="fas fa-search"></i>
+            </button>
+        </div>
+        <div class="filter-controls">
+            <select id="model-type-filter" class="filter-select">
+                <option value="all">All Types</option>
+                <option value="csm">CSM</option>
+                <option value="embeddings">Embeddings</option>
+                <option value="other">Other</option>
+            </select>
+            <select id="model-status-filter" class="filter-select">
+                <option value="all">All Status</option>
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+            </select>
+            <button id="filter-reset-btn" class="filter-reset-button">
+                <i class="fas fa-times"></i> Reset
+            </button>
+        </div>
+    </div>
+    
+    <div class="model-status-section">
+        <div class="status-cards">
+            <div class="status-card">
+                <h3>Active Model</h3>
+                <div class="card-content">
+                    <div class="model-info">
+                        <div class="model-name">{{ active_model.name }}</div>
+                        <div class="model-details">{{ active_model.description }}</div>
+                    </div>
+                    <div class="model-status active">
+                        <span class="status-dot"></span> Active
+                    </div>
+                </div>
+            </div>
+            <div class="status-card">
+                <h3>Model Statistics</h3>
+                <div class="card-content stats-grid">
+                    <div class="stat-item">
+                        <div class="stat-value">{{ model_stats.total }}</div>
+                        <div class="stat-label">Total Models</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value">{{ model_stats.active }}</div>
+                        <div class="stat-label">Active</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value">{{ model_stats.inactive }}</div>
+                        <div class="stat-label">Inactive</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value">{{ model_stats.disk_usage }}</div>
+                        <div class="stat-label">Disk Usage</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="models-table-container">
+        <table class="models-table">
+            <thead>
+                <tr>
+                    <th class="sortable" data-sort="name">Model Name <i class="fas fa-sort"></i></th>
+                    <th class="sortable" data-sort="type">Type <i class="fas fa-sort"></i></th>
+                    <th class="sortable" data-sort="version">Version <i class="fas fa-sort"></i></th>
+                    <th class="sortable" data-sort="size">Size <i class="fas fa-sort"></i></th>
+                    <th class="sortable" data-sort="last_used">Last Used <i class="fas fa-sort"></i></th>
+                    <th class="sortable" data-sort="status">Status <i class="fas fa-sort"></i></th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for model in models %}
+                <tr data-model-id="{{ model.id }}">
+                    <td>
+                        <div class="model-name-cell">
+                            <span class="model-name">{{ model.name }}</span>
+                            <span class="model-path">{{ model.path }}</span>
+                        </div>
+                    </td>
+                    <td>{{ model.type }}</td>
+                    <td>{{ model.version }}</td>
+                    <td>{{ model.size_formatted }}</td>
+                    <td>{{ model.last_used_formatted }}</td>
+                    <td>
+                        <span class="status-badge {{ model.status|lower }}">
+                            {{ model.status }}
+                        </span>
+                    </td>
+                    <td>
+                        <div class="action-menu">
+                            <button class="action-button">
+                                <i class="fas fa-ellipsis-v"></i>
+                            </button>
+                            <div class="action-dropdown">
+                                {% if model.status == 'Active' %}
+                                <a href="#" class="action-item deactivate-model" data-model-id="{{ model.id }}">
+                                    <i class="fas fa-power-off"></i> Deactivate
+                                </a>
+                                {% else %}
+                                <a href="#" class="action-item activate-model" data-model-id="{{ model.id }}">
+                                    <i class="fas fa-play"></i> Activate
+                                </a>
+                                {% endif %}
+                                <a href="#" class="action-item view-model" data-model-id="{{ model.id }}">
+                                    <i class="fas fa-eye"></i> View Details
+                                </a>
+                                <a href="#" class="action-item validate-model" data-model-id="{{ model.id }}">
+                                    <i class="fas fa-check-circle"></i> Validate
+                                </a>
+                                <a href="#" class="action-item delete-model" data-model-id="{{ model.id }}">
+                                    <i class="fas fa-trash-alt"></i> Delete
+                                </a>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    
+    <div class="pagination">
+        <div class="pagination-info">
+            Showing {{ pagination.start }}-{{ pagination.end }} of {{ pagination.total }} models
+        </div>
+        <div class="pagination-controls">
+            <button class="pagination-button" {% if not pagination.has_prev %}disabled{% endif %}>
+                <i class="fas fa-angle-double-left"></i>
+            </button>
+            <button class="pagination-button" {% if not pagination.has_prev %}disabled{% endif %}>
+                <i class="fas fa-angle-left"></i>
+            </button>
+            <div class="pagination-pages">
+                {% for page in pagination.pages %}
+                <button class="pagination-page {% if page == pagination.current %}active{% endif %}">
+                    {{ page }}
+                </button>
+                {% endfor %}
+            </div>
+            <button class="pagination-button" {% if not pagination.has_next %}disabled{% endif %}>
+                <i class="fas fa-angle-right"></i>
+            </button>
+            <button class="pagination-button" {% if not pagination.has_next %}disabled{% endif %}>
+                <i class="fas fa-angle-double-right"></i>
+            </button>
+        </div>
+        <div class="pagination-size">
+            <label for="pagination-size-select">Show:</label>
+            <select id="pagination-size-select" class="pagination-size-select">
+                <option value="10" {% if pagination.per_page == 10 %}selected{% endif %}>10</option>
+                <option value="25" {% if pagination.per_page == 25 %}selected{% endif %}>25</option>
+                <option value="50" {% if pagination.per_page == 50 %}selected{% endif %}>50</option>
+                <option value="100" {% if pagination.per_page == 100 %}selected{% endif %}>100</option>
+            </select>
+        </div>
+    </div>
+</div>
+
+<!-- Model Details Modal -->
+<div id="model-details-modal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>Model Details</h2>
+            <button class="close-modal">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="details-container">
+                <div class="details-section">
+                    <h3>Basic Information</h3>
+                    <div class="details-grid">
+                        <div class="detail-item">
+                            <span class="detail-label">Name:</span>
+                            <span class="detail-value" id="model-detail-name"></span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Type:</span>
+                            <span class="detail-value" id="model-detail-type"></span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Version:</span>
+                            <span class="detail-value" id="model-detail-version"></span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Status:</span>
+                            <span class="detail-value status-badge" id="model-detail-status"></span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="details-section">
+                    <h3>Technical Information</h3>
+                    <div class="details-grid">
+                        <div class="detail-item">
+                            <span class="detail-label">File Path:</span>
+                            <span class="detail-value" id="model-detail-path"></span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Size:</span>
+                            <span class="detail-value" id="model-detail-size"></span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Created:</span>
+                            <span class="detail-value" id="model-detail-created"></span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Last Modified:</span>
+                            <span class="detail-value" id="model-detail-modified"></span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Last Used:</span>
+                            <span class="detail-value" id="model-detail-last-used"></span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">MD5 Hash:</span>
+                            <span class="detail-value" id="model-detail-hash"></span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="details-section">
+                    <h3>Usage Statistics</h3>
+                    <div class="details-grid">
+                        <div class="detail-item">
+                            <span class="detail-label">Total Uses:</span>
+                            <span class="detail-value" id="model-detail-uses"></span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Average Processing Time:</span>
+                            <span class="detail-value" id="model-detail-avg-time"></span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Success Rate:</span>
+                            <span class="detail-value" id="model-detail-success-rate"></span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="details-section">
+                    <h3>Model Parameters</h3>
+                    <div class="parameters-container" id="model-detail-parameters">
+                        <div class="parameter-item">
+                            <span class="parameter-key">Parameter Key</span>
+                            <span class="parameter-value">Parameter Value</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button id="close-detail-btn" class="button secondary-button">Close</button>
+            {% if model.status == 'Active' %}
+            <button id="deactivate-detail-btn" class="button warning-button">Deactivate</button>
+            {% else %}
+            <button id="activate-detail-btn" class="button primary-button">Activate</button>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Download Model Modal -->
+<div id="download-model-modal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>Download New Model</h2>
+            <button class="close-modal">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="form-container">
+                <form id="download-model-form" class="config-form">
+                    <div class="form-group">
+                        <label for="model-repository">Model Repository</label>
+                        <select id="model-repository" name="repository" class="form-control">
+                            <option value="huggingface">Hugging Face</option>
+                            <option value="modelscope">ModelScope</option>
+                            <option value="custom">Custom URL</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="model-url">Model URL or Identifier</label>
+                        <input type="text" id="model-url" name="model_url" class="form-control" placeholder="e.g., 'username/model-name' or complete URL">
+                        <small class="form-text">For Hugging Face, use format 'username/model-name'</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="model-name">Model Name (Optional)</label>
+                        <input type="text" id="model-name" name="model_name" class="form-control" placeholder="Leave blank to use repository name">
+                        <small class="form-text">If left blank, will use the model's repository name</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="model-version">Version Tag (Optional)</label>
+                        <input type="text" id="model-version" name="model_version" class="form-control" placeholder="e.g., 'main', 'v1.0', etc.">
+                        <small class="form-text">Default is 'main' for most repositories</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <div class="checkbox-control">
+                            <input type="checkbox" id="activate-after-download" name="activate" checked>
+                            <label for="activate-after-download">Activate model after download</label>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button id="cancel-download-btn" class="button secondary-button">Cancel</button>
+            <button id="start-download-btn" class="button primary-button">Start Download</button>
+        </div>
+    </div>
+</div>
+
+<!-- Download Progress Modal -->
+<div id="download-progress-modal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>Downloading Model</h2>
+            <button class="close-modal">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="progress-container">
+                <div class="progress-info">
+                    <div class="download-model-name">Model: <span id="downloading-model-name"></span></div>
+                    <div class="download-stats">
+                        <span id="download-percentage">0%</span> - 
+                        <span id="download-speed">0 MB/s</span> - 
+                        <span id="download-remaining">Calculating...</span>
+                    </div>
+                </div>
+                <div class="progress-bar-container">
+                    <div class="progress-bar" id="download-progress-bar" style="width: 0%;"></div>
+                </div>
+                <div class="download-size">
+                    <span id="download-current-size">0 MB</span> / <span id="download-total-size">Unknown</span>
+                </div>
+                <div class="download-status" id="download-status-message">
+                    Initializing download...
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button id="cancel-download-progress-btn" class="button secondary-button">Cancel Download</button>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div id="delete-model-modal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>Delete Model</h2>
+            <button class="close-modal">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="warning-message">
+                <div class="warning-icon">⚠️</div>
+                <div class="warning-text">
+                    <p><strong>Warning:</strong> Are you sure you want to delete the model "<span id="delete-model-name"></span>"?</p>
+                    <p>This action cannot be undone, and will permanently remove the model file from disk.</p>
+                </div>
+            </div>
+            <div class="confirmation-checkbox">
+                <div class="checkbox-control">
+                    <input type="checkbox" id="delete-confirmation" name="delete_confirmation">
+                    <label for="delete-confirmation">I understand that this action cannot be undone</label>
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button id="cancel-delete-btn" class="button secondary-button">Cancel</button>
+            <button id="confirm-delete-btn" class="button danger-button" disabled>Delete Model</button>
+        </div>
+    </div>
+</div>
+{% endblock %} 

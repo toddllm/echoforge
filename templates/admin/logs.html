@@ -1,0 +1,307 @@
+{% extends "admin/layout.html" %}
+
+{% block title %}Logs Viewer - EchoForge Admin{% endblock %}
+
+{% block page_title %}Logs Viewer{% endblock %}
+
+{% block content_actions %}
+<div class="action-buttons">
+    <button id="refresh-logs-btn" class="button primary-button">Refresh Logs</button>
+    <button id="download-logs-btn" class="button secondary-button">Download Logs</button>
+    <button id="clear-logs-btn" class="button danger-button">Clear Logs</button>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="logs-management">
+    <!-- Log Filters -->
+    <div class="log-filters">
+        <div class="filter-group">
+            <label for="log-level-filter">Level:</label>
+            <select id="log-level-filter" class="form-control">
+                <option value="all" selected>All Levels</option>
+                <option value="debug">Debug</option>
+                <option value="info">Info</option>
+                <option value="warning">Warning</option>
+                <option value="error">Error</option>
+                <option value="critical">Critical</option>
+            </select>
+        </div>
+        
+        <div class="filter-group">
+            <label for="log-source-filter">Source:</label>
+            <select id="log-source-filter" class="form-control">
+                <option value="all" selected>All Sources</option>
+                {% for source in log_sources %}
+                <option value="{{ source }}">{{ source }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        
+        <div class="filter-group date-filter">
+            <label for="log-date-from">From:</label>
+            <input type="datetime-local" id="log-date-from" class="form-control">
+        </div>
+        
+        <div class="filter-group date-filter">
+            <label for="log-date-to">To:</label>
+            <input type="datetime-local" id="log-date-to" class="form-control">
+        </div>
+        
+        <div class="filter-group search-filter">
+            <label for="log-search">Search:</label>
+            <input type="text" id="log-search" class="form-control" placeholder="Search logs...">
+        </div>
+    </div>
+
+    <!-- Logs Table -->
+    <div class="logs-table-container">
+        <table class="logs-table" id="logs-table">
+            <thead>
+                <tr>
+                    <th class="timestamp-col">Timestamp</th>
+                    <th class="level-col">Level</th>
+                    <th class="source-col">Source</th>
+                    <th class="message-col">Message</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for log in logs %}
+                <tr class="log-row log-level-{{ log.level | lower }}">
+                    <td class="timestamp-col">{{ log.timestamp }}</td>
+                    <td class="level-col">
+                        <span class="log-level log-level-{{ log.level | lower }}">{{ log.level }}</span>
+                    </td>
+                    <td class="source-col">{{ log.source }}</td>
+                    <td class="message-col">
+                        <div class="log-message">{{ log.message }}</div>
+                        {% if log.traceback %}
+                        <button class="toggle-traceback" title="Show traceback">⊕</button>
+                        <div class="log-traceback" style="display: none;">
+                            <pre>{{ log.traceback }}</pre>
+                        </div>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        
+        {% if not logs %}
+        <div class="no-logs-message">
+            <p>No logs found matching the current filters.</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Pagination Controls -->
+    <div class="pagination-controls">
+        <div class="pagination-info">
+            Showing {{ pagination.start }} to {{ pagination.end }} of {{ pagination.total }} logs
+        </div>
+        <div class="pagination-buttons">
+            <button class="pagination-btn" {% if not pagination.has_prev %}disabled{% endif %} data-page="prev">
+                &laquo; Prev
+            </button>
+            
+            {% for page in pagination.pages %}
+            <button class="pagination-btn {% if page == pagination.current %}active{% endif %}" data-page="{{ page }}">
+                {{ page }}
+            </button>
+            {% endfor %}
+            
+            <button class="pagination-btn" {% if not pagination.has_next %}disabled{% endif %} data-page="next">
+                Next &raquo;
+            </button>
+        </div>
+        <div class="pagination-size">
+            <label for="page-size">Items per page:</label>
+            <select id="page-size" class="form-control">
+                <option value="50" {% if pagination.page_size == 50 %}selected{% endif %}>50</option>
+                <option value="100" {% if pagination.page_size == 100 %}selected{% endif %}>100</option>
+                <option value="200" {% if pagination.page_size == 200 %}selected{% endif %}>200</option>
+                <option value="500" {% if pagination.page_size == 500 %}selected{% endif %}>500</option>
+            </select>
+        </div>
+    </div>
+
+    <!-- Log Details -->
+    <div class="log-details-panel">
+        <div class="log-details-header">
+            <h3>Log Details</h3>
+            <button class="close-details">&times;</button>
+        </div>
+        <div class="log-details-content">
+            <div class="detail-section">
+                <div class="detail-row">
+                    <div class="detail-label">Timestamp:</div>
+                    <div class="detail-value" id="detail-timestamp"></div>
+                </div>
+                <div class="detail-row">
+                    <div class="detail-label">Level:</div>
+                    <div class="detail-value" id="detail-level"></div>
+                </div>
+                <div class="detail-row">
+                    <div class="detail-label">Source:</div>
+                    <div class="detail-value" id="detail-source"></div>
+                </div>
+                <div class="detail-row">
+                    <div class="detail-label">Logger:</div>
+                    <div class="detail-value" id="detail-logger"></div>
+                </div>
+                <div class="detail-row">
+                    <div class="detail-label">Thread:</div>
+                    <div class="detail-value" id="detail-thread"></div>
+                </div>
+            </div>
+            
+            <div class="detail-section">
+                <div class="detail-label">Message:</div>
+                <div class="detail-value message-box" id="detail-message"></div>
+            </div>
+            
+            <div class="detail-section" id="detail-traceback-section" style="display: none;">
+                <div class="detail-label">Traceback:</div>
+                <pre class="detail-value traceback-box" id="detail-traceback"></pre>
+            </div>
+            
+            <div class="detail-section" id="detail-context-section" style="display: none;">
+                <div class="detail-label">Context:</div>
+                <pre class="detail-value context-box" id="detail-context"></pre>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Download Modal -->
+<div id="download-modal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>Download Logs</h2>
+            <button class="close-modal">&times;</button>
+        </div>
+        <div class="modal-body">
+            <form id="download-form" class="download-form">
+                <div class="form-group">
+                    <label for="download-format">Format:</label>
+                    <select id="download-format" name="format" class="form-control">
+                        <option value="csv">CSV</option>
+                        <option value="json">JSON</option>
+                        <option value="txt">Plain Text</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="download-timeframe">Timeframe:</label>
+                    <select id="download-timeframe" name="timeframe" class="form-control">
+                        <option value="current">Current Filtered View</option>
+                        <option value="today">Today</option>
+                        <option value="yesterday">Yesterday</option>
+                        <option value="last7days">Last 7 Days</option>
+                        <option value="last30days">Last 30 Days</option>
+                        <option value="all">All Logs</option>
+                        <option value="custom">Custom...</option>
+                    </select>
+                </div>
+                
+                <div id="custom-timeframe" style="display: none;">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="download-from">From:</label>
+                            <input type="datetime-local" id="download-from" name="from" class="form-control">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="download-to">To:</label>
+                            <input type="datetime-local" id="download-to" name="to" class="form-control">
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <div class="checkbox-control">
+                        <input type="checkbox" id="download-include-tracebacks" name="include_tracebacks" checked>
+                        <label for="download-include-tracebacks">Include Tracebacks</label>
+                    </div>
+                </div>
+            </form>
+        </div>
+        <div class="modal-footer">
+            <button id="download-cancel-btn" class="button secondary-button">Cancel</button>
+            <button id="download-confirm-btn" class="button primary-button">Download</button>
+        </div>
+    </div>
+</div>
+
+<!-- Clear Logs Modal -->
+<div id="clear-logs-modal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>Clear Logs</h2>
+            <button class="close-modal">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="warning-message">
+                <div class="warning-icon">⚠️</div>
+                <div class="warning-text">
+                    <p><strong>Warning:</strong> This action will permanently delete logs. This cannot be undone.</p>
+                    <p>Please select which logs you want to clear:</p>
+                </div>
+            </div>
+            
+            <form id="clear-logs-form" class="clear-logs-form">
+                <div class="form-group">
+                    <select id="clear-scope" name="scope" class="form-control">
+                        <option value="filtered">Current Filtered Logs</option>
+                        <option value="all">All Logs</option>
+                        <option value="older_than">Logs Older Than...</option>
+                        <option value="level">Logs With Level...</option>
+                    </select>
+                </div>
+                
+                <div id="older-than-options" style="display: none;">
+                    <div class="form-group">
+                        <select id="clear-older-than" name="older_than" class="form-control">
+                            <option value="1d">1 Day</option>
+                            <option value="7d">7 Days</option>
+                            <option value="30d">30 Days</option>
+                            <option value="90d">90 Days</option>
+                            <option value="custom">Custom...</option>
+                        </select>
+                    </div>
+                    
+                    <div id="custom-days" style="display: none;">
+                        <div class="form-group">
+                            <label for="clear-custom-days">Number of days:</label>
+                            <input type="number" id="clear-custom-days" name="custom_days" class="form-control" min="1" value="14">
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="level-options" style="display: none;">
+                    <div class="form-group">
+                        <select id="clear-level" name="level" class="form-control">
+                            <option value="debug">Debug and Below</option>
+                            <option value="info">Info and Below</option>
+                            <option value="warning">Warning and Below</option>
+                            <option value="error">Error and Below</option>
+                            <option value="critical">Critical Only</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="confirmation-check">
+                    <div class="checkbox-control">
+                        <input type="checkbox" id="confirm-clear" name="confirm">
+                        <label for="confirm-clear">I understand that this action cannot be undone</label>
+                    </div>
+                </div>
+            </form>
+        </div>
+        <div class="modal-footer">
+            <button id="clear-cancel-btn" class="button secondary-button">Cancel</button>
+            <button id="clear-confirm-btn" class="button danger-button" disabled>Clear Logs</button>
+        </div>
+    </div>
+</div>
+{% endblock %} 
