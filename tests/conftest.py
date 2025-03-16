@@ -1,9 +1,15 @@
+"""
+Pytest configuration and fixtures.
+"""
+
 import os
 import pytest
 from unittest.mock import MagicMock
 import tempfile
+from fastapi.testclient import TestClient
 
 from app.core.voice_generator import VoiceGenerator
+from app.main import app
 
 
 @pytest.fixture
@@ -35,4 +41,27 @@ def test_db_connection():
     # For now, we'll just return a mock
     db = MagicMock()
     db.execute.return_value = None
-    return db 
+    return db
+
+
+@pytest.fixture
+def client():
+    """Create a test client for the FastAPI application."""
+    return TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def test_env():
+    """Set up test environment variables."""
+    # Store original environment
+    original_env = os.environ.copy()
+    
+    # Set test environment variables
+    os.environ["ECHOFORGE_TEST"] = "true"
+    os.environ["OUTPUT_DIR"] = "/tmp/echoforge_test/voices"
+    
+    yield
+    
+    # Restore original environment
+    os.environ.clear()
+    os.environ.update(original_env) 

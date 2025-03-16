@@ -1,46 +1,71 @@
-# Python bytecode
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
-
-# Distribution / packaging
-dist/
 build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
 *.egg-info/
+.installed.cfg
+*.egg
 
 # Virtual environments
-venv/
+.env
+.venv
 env/
+venv/
 ENV/
+env.bak/
+venv.bak/
 
-# IDE files
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+.tox/
+coverage.xml
+*.cover
+.hypothesis/
+
+# IDE
 .idea/
 .vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Project specific
+/outputs/
+/logs/
+/tmp/
+.env.local
+
+# Distribution / packaging
+*.egg-info/
+
+# IDE files
 *.sublime-project
 *.sublime-workspace
 
 # Local development settings
-.env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
 source.env
 *.env
 
 # Logs
-logs/
 *.log
 
 # Unit test / coverage reports
-htmlcov/
-.tox/
-.coverage
-.coverage.*
-.cache
-coverage.xml
 *.cover
 
 # Generated media files
