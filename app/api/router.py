@@ -164,6 +164,7 @@ class VoiceGenerationRequest(BaseModel):
     temperature: float = Field(config.DEFAULT_TEMPERATURE, ge=0.1, le=1.0, description="Temperature for generation")
     top_k: int = Field(config.DEFAULT_TOP_K, ge=1, description="Top-K for token selection")
     style: str = Field(config.DEFAULT_STYLE, description="Voice style")
+    device: str = Field(config.DEFAULT_DEVICE, description="Device to use for inference (auto, cuda, or cpu)")
 
 
 @router.post("/generate")
@@ -182,6 +183,10 @@ async def generate_voice(background_tasks: BackgroundTasks, request: VoiceGenera
         if os.environ.get("ECHOFORGE_TEST") == "true" and (request.speaker_id < 1 or request.speaker_id > 4):
             raise HTTPException(status_code=400, detail="Invalid speaker ID")
         
+        # Validate device
+        if request.device not in ["auto", "cuda", "cpu"]:
+            raise HTTPException(status_code=400, detail="Device must be 'auto', 'cuda', or 'cpu'")
+        
         # Create a unique task ID
         task_id = str(uuid.uuid4())
         
@@ -199,7 +204,8 @@ async def generate_voice(background_tasks: BackgroundTasks, request: VoiceGenera
             speaker_id=request.speaker_id,
             temperature=request.temperature,
             top_k=request.top_k,
-            style=request.style
+            style=request.style,
+            device=request.device
         )
         
         return {"task_id": task_id, "status": "processing"}
@@ -241,50 +247,50 @@ async def get_task_status(task_id: str):
 
 
 async def _generate_voice_task(task_id: str, text: str, speaker_id: int, 
-                              temperature: float, top_k: int, style: str):
+                              temperature: float, top_k: int, style: str, device: str = "auto"):
     """Background task for voice generation."""
     try:
         # Update task status to processing
         task_manager.update_task(task_id, status="processing")
         
         # Generate voice
-        output_path, error = voice_generator.generate(
+        logger.info(f"Generating voice for task {task_id} with device={device}")
+        output_path, url = voice_generator.generate(
             text=text,
             speaker_id=speaker_id,
             temperature=temperature,
             top_k=top_k,
-            style=style
+            style=style,
+            device=device
         )
         
-        if error:
-            # Update task with error
+        if output_path and url:
+            # Update task with success
             task_manager.update_task(
-                task_id=task_id,
-                status="error",
-                error=error
+                task_id, 
+                status="completed",
+                result={
+                    "text": text,
+                    "speaker_id": speaker_id,
+                    "file_url": url,
+                    "output_file": url,  # Add output_file for compatibility
+                    "file_path": output_path
+                }
             )
-            return
-        
-        # Create public URL for the generated file
-        filename = os.path.basename(output_path)
-        public_url = f"/voices/{filename}"
-        
-        # Update task with success result
-        task_manager.update_task(
-            task_id=task_id,
-            status="completed",
-            result={
-                "text": text,
-                "speaker_id": speaker_id,
-                "file_url": public_url,
-                "file_path": output_path
-            }
-        )
-        
+            logger.info(f"Voice generation task {task_id} completed successfully")
+        else:
+            # Update task with failure
+            task_manager.update_task(
+                task_id, 
+                status="failed",
+                error="Failed to generate voice"
+            )
+            logger.error(f"Voice generation task {task_id} failed")
     except Exception as e:
-        logger.error(f"Error in voice generation task: {str(e)}", exc_info=True)
+        logger.exception(f"Error in voice generation task {task_id}: {str(e)}")
+        # Update task with error
         task_manager.update_task(
-            task_id=task_id,
-            status="error",
-            error=f"Generation failed: {str(e)}"
+            task_id, 
+            status="failed",
+            error=str(e)
         ) 

@@ -53,11 +53,14 @@ class VoiceGenerator:
         logger.info("VoiceGenerator initialized with model_path=%s, output_dir=%s", 
                    model_path, output_dir)
     
-    def load_model(self) -> bool:
+    def load_model(self, device: str = None) -> bool:
         """
         Load the voice generation model.
         
         Attempts to load the CSM model with proper fallback mechanisms.
+        
+        Args:
+            device: Device to use for inference ('auto', 'cuda', or 'cpu')
         
         Returns:
             bool: True if model was loaded successfully, False otherwise
@@ -77,7 +80,14 @@ class VoiceGenerator:
             logger.info("Loading CSM model from %s", self.model_path)
             
             # Determine the best device to use
-            device = self._determine_device()
+            if device is None or device == "auto":
+                device = self._determine_device()
+            else:
+                # Validate the device
+                if device == "cuda" and not torch.cuda.is_available():
+                    logger.warning("CUDA requested but not available, falling back to CPU")
+                    device = "cpu"
+                logger.info(f"Using explicitly requested device: {device}")
             
             # Create the CSM model
             self.model = create_csm_model(
@@ -143,16 +153,16 @@ class VoiceGenerator:
             temperature: Temperature for sampling (higher = more diverse)
             top_k: Number of highest probability tokens to consider
             style: Voice style to use (not used in current CSM implementation)
-            device: Device to use for inference (auto, cuda, or cpu)
+            device: Device to use for inference ('auto', 'cuda', or 'cpu')
             
         Returns:
             Tuple containing:
                 - Path to the generated audio file (or None if failed)
                 - URL to access the file (or None if failed)
         """
-        # Ensure model is loaded
+        # Ensure model is loaded with the specified device
         if self.model is None:
-            if not self.load_model():
+            if not self.load_model(device=device):
                 logger.error("Failed to load model")
                 return None, None
         
@@ -164,7 +174,7 @@ class VoiceGenerator:
         
         try:
             logger.info(f"Generating voice for text: '{text}' with speaker_id={speaker_id}, "
-                       f"temperature={temperature}, top_k={top_k}")
+                       f"temperature={temperature}, top_k={top_k}, device={device}")
             
             # Generate speech
             audio, sample_rate = self.model.generate_speech(
