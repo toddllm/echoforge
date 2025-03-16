@@ -8,14 +8,27 @@ It handles model loading, GPU/CPU detection, and provides fallback mechanisms.
 import os
 import sys
 import logging
+import time
+import uuid
 import torch
 import torchaudio
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union, Any
 from huggingface_hub import hf_hub_download, snapshot_download
 
-# Configure logging
-logger = logging.getLogger(__name__)
+from app.core import config
+
+# Set up logging
+logger = logging.getLogger("echoforge.csm_model")
+
+# Try to import the TTS POC adapter
+try:
+    from app.models.tts_poc_adapter import TTSPOCAdapter
+    HAS_TTS_POC = True
+    logger.info("TTS POC adapter imported successfully")
+except ImportError as e:
+    logger.warning(f"Could not import TTS POC adapter: {e}")
+    HAS_TTS_POC = False
 
 class CSMModelError(Exception):
     """Base exception for CSM model errors."""
@@ -192,6 +205,17 @@ class CSMModel:
             return True
         
         try:
+            # First, try to use the TTS POC adapter if available
+            if HAS_TTS_POC:
+                logger.info("Trying to initialize TTS POC adapter")
+                self.tts_poc_adapter = TTSPOCAdapter(output_dir=config.OUTPUT_DIR)
+                if self.tts_poc_adapter.available:
+                    logger.info("Using TTS POC adapter for speech generation")
+                    self.is_initialized = True
+                    return True
+                else:
+                    logger.warning("TTS POC adapter not available, falling back to basic implementation")
+            
             # Try importing silentcipher to check if it's available
             try:
                 import silentcipher
@@ -264,6 +288,12 @@ class CSMModel:
                 # Normalize the audio
                 audio = audio / audio.abs().max()
                 
+                # Always move the tensor to CPU before returning
+                # This prevents errors when saving with torchaudio
+                if audio.device.type != 'cpu':
+                    logger.info(f"Moving audio tensor from {audio.device} to CPU")
+                    audio = audio.cpu()
+                
                 logger.info(f"Generated audio with {audio.shape[0]} samples at {self.sample_rate} Hz")
                 return audio
         
@@ -283,89 +313,91 @@ class CSMModel:
         """
         Generate speech from text.
         
+        This method generates speech from text using the CSM model.
+        
         Args:
             text: The text to convert to speech.
             speaker_id: The speaker ID to use.
-            temperature: Temperature for sampling. Higher values produce more diverse outputs.
-            top_k: Number of highest probability tokens to consider for sampling.
-            max_audio_length_ms: Maximum audio length in milliseconds.
-            device: Device to use for generation. If different from current device, will attempt to reload the model.
+            temperature: The temperature to use for sampling.
+            top_k: The top-k value to use for sampling.
+            max_audio_length_ms: The maximum audio length in milliseconds.
+            device: The device to use for inference.
             
         Returns:
-            A tuple containing the generated audio tensor and the sample rate.
+            The generated audio tensor and sample rate.
             
         Raises:
-            CSMModelError: If the model is not initialized or generation fails.
+            CSMModelError: If the model is not initialized or speech cannot be generated.
         """
-        # Handle device override if requested
-        if device is not None and device != self.device and device != "auto":
-            logger.info(f"Device override requested: {device}, current device: {self.device}")
-            if (device == "cpu" or (device == "cuda" and torch.cuda.is_available())):
-                logger.info(f"Switching to requested device: {device}")
-                # Reinitialize on the new device
-                self.device = device
-                self.is_initialized = False
-        
         if not self.is_initialized:
-            try:
-                self.initialize()
-            except Exception as e:
-                raise CSMModelError(f"Model not initialized and initialization failed: {e}")
+            logger.warning("CSM model not initialized, initializing now")
+            self.initialize()
         
-        # Set default parameters if not provided
-        temperature = temperature if temperature is not None else self.DEFAULT_GENERATION_PARAMS["temperature"]
-        top_k = top_k if top_k is not None else self.DEFAULT_GENERATION_PARAMS["top_k"]
-        max_audio_length_ms = max_audio_length_ms if max_audio_length_ms is not None else self.DEFAULT_GENERATION_PARAMS["max_audio_length_ms"]
-        
-        try:
-            logger.info(f"Generating speech for text: '{text}' with speaker_id={speaker_id}, temperature={temperature}, top_k={top_k}, device={self.device}")
+        # Override device if explicitly requested
+        if device and device != self.device:
+            logger.info(f"Device override requested: {device}, current device: {self.device}")
+            original_device = self.device
+            self.device = device
             
-            # Generate speech
+            # Check if we need to reinitialize the model
+            if hasattr(self, 'generator') and hasattr(self.generator, 'device'):
+                logger.info(f"Switching to requested device: {device}")
+                self.generator.device = device
+        
+        # Provide default values if not specified
+        if temperature is None:
+            temperature = 0.7
+        if top_k is None:
+            top_k = 50
+        if max_audio_length_ms is None:
+            max_audio_length_ms = 90000  # 90 seconds
+        
+        if hasattr(self, 'tts_poc_adapter') and self.tts_poc_adapter.available:
+            # Use the TTS POC adapter
+            logger.info(f"Generating speech for text: '{text}' with speaker_id={speaker_id}, "
+                      f"temperature={temperature}, top_k={top_k}, device={device} using TTS POC adapter")
+            
+            audio, sample_rate = self.tts_poc_adapter.generate_speech(
+                text=text,
+                speaker_id=speaker_id,
+                temperature=temperature,
+                top_k=top_k,
+                device=device if device else "auto"
+            )
+            
+            if audio is not None:
+                logger.info(f"Generated audio with shape {audio.shape}")
+                return audio, sample_rate
+            else:
+                logger.warning("TTS POC adapter failed to generate speech, falling back to basic implementation")
+                # Fall back to basic implementation
+                # Make sure we have a basic implementation available
+                if not hasattr(self, 'generator'):
+                    self._initialize_basic_tts()
+        
+        # Use the basic implementation or fallback
+        try:
+            logger.info(f"Generating speech for text: '{text}' with speaker_id={speaker_id}, "
+                      f"temperature={temperature}, top_k={top_k}, device={device}")
+            
+            # Generate the speech
             audio = self.generator.generate(
                 text=text,
                 speaker=speaker_id,
-                context=[],  # No context for now
                 temperature=temperature,
                 topk=top_k,
-                max_audio_length_ms=max_audio_length_ms,
+                max_audio_length_ms=max_audio_length_ms
             )
             
-            sample_rate = self.generator.sample_rate
-            logger.info(f"Generated audio with {audio.shape[0]} samples at {sample_rate} Hz")
+            logger.info(f"Generated audio with shape {audio.shape if hasattr(audio, 'shape') else 'unknown'}")
             
+            # Return the audio and sample rate
+            sample_rate = getattr(self.generator, 'sample_rate', 24000)
             return audio, sample_rate
             
         except Exception as e:
             logger.error(f"Error generating speech: {e}")
-            
-            # If we're on CUDA and that failed, try CPU
-            if str(self.device).startswith("cuda") and device != "cpu":
-                try:
-                    logger.warning("CUDA generation failed, attempting CPU fallback")
-                    # Switch to CPU
-                    self.device = "cpu"
-                    self.is_initialized = False
-                    self.initialize()
-                    
-                    audio = self.generator.generate(
-                        text=text,
-                        speaker=speaker_id,
-                        context=[],
-                        temperature=temperature,
-                        topk=top_k,
-                        max_audio_length_ms=max_audio_length_ms,
-                    )
-                    
-                    sample_rate = self.generator.sample_rate
-                    logger.info(f"Generated audio on CPU with {audio.shape[0]} samples at {sample_rate} Hz")
-                    
-                    return audio, sample_rate
-                except Exception as cpu_e:
-                    logger.error(f"CPU fallback also failed: {cpu_e}")
-                    raise CSMModelError(f"Failed to generate speech on both CUDA and CPU: {e}, CPU error: {cpu_e}")
-            else:
-                # No fallback available, re-raise the error
-                raise CSMModelError(f"Failed to generate speech: {e}")
+            raise CSMModelError(f"Could not generate speech: {e}")
     
     def save_audio(self, audio: torch.Tensor, sample_rate: int, output_path: str) -> str:
         """
@@ -386,15 +418,46 @@ class CSMModel:
             # Ensure output directory exists
             os.makedirs(os.path.dirname(output_path), exist_ok=True)
             
+            # Ensure audio tensor is on CPU before saving
+            if audio.device.type != 'cpu':
+                logger.info(f"Moving audio tensor from {audio.device} to CPU before saving")
+                audio = audio.cpu()
+            
+            # Make sure we have the right dimensions for torchaudio
+            if audio.dim() == 1:
+                audio = audio.unsqueeze(0)  # Add channel dimension
+            
+            # Normalize audio if needed
+            if audio.abs().max() > 1.0:
+                logger.debug("Normalizing audio before saving")
+                audio = audio / audio.abs().max()
+            
             # Save audio
-            torchaudio.save(output_path, audio.unsqueeze(0), sample_rate)
+            torchaudio.save(output_path, audio, sample_rate)
             logger.info(f"Saved audio to {output_path}")
             
             return output_path
             
         except Exception as e:
             logger.error(f"Error saving audio: {e}")
-            raise CSMModelError(f"Could not save audio: {e}")
+            
+            # Try alternative method if torchaudio fails
+            try:
+                logger.info("Trying alternative method to save audio")
+                import scipy.io.wavfile as wavfile
+                
+                # Convert to numpy and save using scipy
+                if audio.dim() > 1:
+                    audio = audio.squeeze()  # Remove channel dimension
+                
+                audio_np = audio.detach().cpu().numpy()
+                wavfile.write(output_path, sample_rate, audio_np)
+                logger.info(f"Saved audio using scipy to {output_path}")
+                
+                return output_path
+            except Exception as alt_e:
+                logger.error(f"Alternative save method also failed: {alt_e}")
+                raise CSMModelError(f"Could not save audio: {e}, Alternative method failed: {alt_e}")
     
     def cleanup(self) -> None:
         """
