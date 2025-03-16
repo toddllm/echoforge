@@ -199,27 +199,53 @@ class TTSPOCAdapter:
             
             logger.info(f"Voice generation command succeeded")
             
-            # Log the complete output to debug
-            logger.debug(f"STDOUT: {stdout}")
+            # Log the complete output for debugging
+            logger.info(f"STDOUT: {stdout}")
             if stderr:
-                logger.debug(f"STDERR: {stderr}")
+                logger.info(f"STDERR: {stderr}")
             
             # Wait a moment to ensure file system operations complete
-            time.sleep(1)
+            time.sleep(2)
+            
+            # Parse the output to find any clues about file location
+            potential_output_path = None
+            
+            # Try to find mentions of file paths or creation in the stdout
+            for line in stdout.splitlines():
+                # Search for common output patterns
+                for pattern in ["saved to", "output", "generated", "file", "wav", "audio", "created", "wrote"]:
+                    if pattern in line.lower():
+                        logger.info(f"Possible output path hint: {line}")
+                
+                # Look for paths
+                if "/" in line and (".wav" in line.lower() or ".mp3" in line.lower() or ".ogg" in line.lower()):
+                    # Extract potential path - look for patterns like /path/to/file.wav
+                    path_candidates = []
+                    for word in line.split():
+                        if "/" in word and ("." in word or word.endswith("/")):
+                            path_candidates.append(word)
+                    
+                    for path in path_candidates:
+                        # Clean up the path (remove quotes, commas, etc.)
+                        clean_path = path.strip("'\",.;:()[]{}").strip()
+                        if os.path.exists(clean_path):
+                            potential_output_path = clean_path
+                            logger.info(f"Found potential output path in stdout: {potential_output_path}")
+                            break
+                
+                # Look for specific output patterns in the stdout to find the file path
+                if any(phrase in line for phrase in ["Output file:", "Generated file:", "Saved to:", "Writing to", "Audio file"]):
+                    parts = line.split(":", 1) if ":" in line else line.split("to ", 1) if "to " in line else (line, "")
+                    if len(parts) == 2:
+                        possible_path = parts[1].strip().strip("'\",.;:()[]{}").strip()
+                        # Check if this looks like a file path
+                        if "/" in possible_path and os.path.exists(possible_path) and possible_path.endswith(('.wav', '.mp3', '.ogg')):
+                            potential_output_path = possible_path
+                            logger.info(f"Found output path from stdout pattern match: {potential_output_path}")
+                            break
             
             # Look for the output file
-            output_path = None
-            
-            # Look for specific output patterns in the stdout to find the file path
-            for line in stdout.splitlines():
-                if "Output file:" in line or "Generated file:" in line or "Saved to:" in line:
-                    parts = line.split(":", 1)
-                    if len(parts) == 2:
-                        possible_path = parts[1].strip()
-                        if os.path.exists(possible_path) and possible_path.endswith('.wav'):
-                            output_path = possible_path
-                            logger.debug(f"Found output path from stdout: {output_path}")
-                            break
+            output_path = potential_output_path
             
             # Debug: List all WAV files in the temp directory
             logger.info(f"Checking for WAV files in temp directory: {self.temp_output_dir}")
@@ -235,78 +261,164 @@ class TTSPOCAdapter:
             
             # If we didn't find it in stdout, check various locations
             if not output_path or not os.path.exists(output_path):
-                # Try standard patterns in our temp directory
-                potential_paths = [
-                    os.path.join(self.temp_output_dir, f"scene_{scene_id}.wav"),
-                    os.path.join(self.temp_output_dir, f"scene{scene_id}.wav"),
-                    os.path.join(self.temp_output_dir, f"{scene_id}.wav"),
-                    os.path.join(VOICE_POC_PATH, f"output_{scene_id}.wav"),
-                    os.path.join(VOICE_POC_PATH, f"scene_{scene_id}.wav"),
-                    os.path.join(VOICE_POC_PATH, f"scene_{scene_id}_*.wav"),  # Using glob pattern
-                    os.path.join(self.temp_output_dir, f"voice_{scene_id}.wav")
+                # Look for files that might contain the scene_id in the name
+                scene_patterns = [
+                    # Different possible prefixes
+                    f"*{scene_id}*.wav",
+                    f"*scene*{scene_id}*.wav",
+                    f"*voice*{scene_id}*.wav",
+                    f"*output*{scene_id}*.wav",
+                    f"*audio*{scene_id}*.wav",
+                    
+                    # Specific scene id patterns
+                    f"*scene_{scene_id}*.wav",
+                    f"*scene-{scene_id}*.wav",
+                    f"*scene{scene_id}*.wav",
                 ]
                 
-                # Also check the original movie_maker paths as fallback
-                movie_maker_paths = [
-                    os.path.join(MOVIE_MAKER_PATH, "hdmy5movie_voices", "scenes", f"scene_{scene_id}.wav"),
-                    os.path.join(MOVIE_MAKER_PATH, "hdmy5movie_voices", "scenes", f"scene{scene_id}.wav"),
-                    os.path.join(MOVIE_MAKER_PATH, "hdmy5movie_voices", "scenes", f"{scene_id}.wav")
-                ]
-                
-                # Combine both lists
-                potential_paths.extend(movie_maker_paths)
-                
-                # Check for newest .wav files in all potential directories
-                current_time = time.time()
-                directories_to_check = [
+                # Directories to search for scene ID-based files
+                scene_search_dirs = [
                     self.temp_output_dir,
                     VOICE_POC_PATH,
-                    os.path.join(MOVIE_MAKER_PATH, "hdmy5movie_voices", "scenes")
+                    os.path.join(MOVIE_MAKER_PATH, "hdmy5movie_voices", "scenes"),
+                    MOVIE_MAKER_PATH,
+                    os.path.dirname(VOICE_POC_PATH),
+                    os.getcwd()
                 ]
                 
-                # Add the parent directory of VOICE_POC_PATH
-                directories_to_check.append(os.path.dirname(VOICE_POC_PATH))
-                
-                # Consider looking in current directory too
-                directories_to_check.append(os.getcwd())
-                
-                newest_file = None
-                newest_time = 0
-                
-                for directory in directories_to_check:
-                    if os.path.exists(directory):
-                        logger.info(f"Checking directory for WAV files: {directory}")
-                        for filename in os.listdir(directory):
-                            if filename.endswith('.wav'):
-                                file_path = os.path.join(directory, filename)
-                                file_mtime = os.path.getmtime(file_path)
-                                time_diff = current_time - file_mtime
-                                logger.info(f"Found WAV file: {file_path}, modified {time_diff:.1f} seconds ago")
-                                if time_diff < 60 and file_mtime > newest_time:
-                                    newest_time = file_mtime
-                                    newest_file = file_path
-                
-                # First check the exact patterns
-                for path in potential_paths:
-                    # Handle glob patterns
-                    if '*' in path:
-                        matching_files = glob.glob(path)
-                        if matching_files:
-                            output_path = matching_files[0]
-                            logger.debug(f"Found output using glob pattern {path}: {output_path}")
+                for search_dir in scene_search_dirs:
+                    if os.path.exists(search_dir):
+                        for pattern in scene_patterns:
+                            matching_files = glob.glob(os.path.join(search_dir, pattern))
+                            if matching_files:
+                                output_path = matching_files[0]
+                                logger.info(f"Found file matching scene ID pattern {pattern} in {search_dir}: {output_path}")
+                                break
+                        
+                        # Break the outer loop if file found
+                        if output_path and os.path.exists(output_path):
                             break
-                    elif os.path.exists(path):
-                        output_path = path
-                        logger.debug(f"Found output using pattern matching: {output_path}")
-                        break
                 
-                # If not found, use the newest file
-                if (not output_path or not os.path.exists(output_path)) and newest_file:
-                    output_path = newest_file
-                    logger.info(f"Found newest wav file: {output_path}, modified {current_time - newest_time:.1f} seconds ago")
+                # If still not found, try standard patterns in our temp directory
+                if not output_path or not os.path.exists(output_path):
+                    potential_paths = [
+                        os.path.join(self.temp_output_dir, f"scene_{scene_id}.wav"),
+                        os.path.join(self.temp_output_dir, f"scene{scene_id}.wav"),
+                        os.path.join(self.temp_output_dir, f"{scene_id}.wav"),
+                        os.path.join(VOICE_POC_PATH, f"output_{scene_id}.wav"),
+                        os.path.join(VOICE_POC_PATH, f"scene_{scene_id}.wav"),
+                        os.path.join(VOICE_POC_PATH, f"scene_{scene_id}_*.wav"),  # Using glob pattern
+                        os.path.join(self.temp_output_dir, f"voice_{scene_id}.wav")
+                    ]
+                    
+                    # Also check the original movie_maker paths as fallback
+                    movie_maker_paths = [
+                        os.path.join(MOVIE_MAKER_PATH, "hdmy5movie_voices", "scenes", f"scene_{scene_id}.wav"),
+                        os.path.join(MOVIE_MAKER_PATH, "hdmy5movie_voices", "scenes", f"scene{scene_id}.wav"),
+                        os.path.join(MOVIE_MAKER_PATH, "hdmy5movie_voices", "scenes", f"{scene_id}.wav")
+                    ]
+                    
+                    # Combine both lists
+                    potential_paths.extend(movie_maker_paths)
+                    
+                    # Check for newest .wav files in all potential directories
+                    current_time = time.time()
+                    directories_to_check = [
+                        self.temp_output_dir,
+                        VOICE_POC_PATH,
+                        os.path.join(MOVIE_MAKER_PATH, "hdmy5movie_voices", "scenes"),
+                        MOVIE_MAKER_PATH,
+                        os.path.dirname(VOICE_POC_PATH),
+                        os.getcwd()
+                    ]
+                    
+                    newest_file = None
+                    newest_time = 0
+                    
+                    for directory in directories_to_check:
+                        if os.path.exists(directory):
+                            logger.info(f"Checking directory for WAV files: {directory}")
+                            for filename in os.listdir(directory):
+                                if filename.endswith('.wav'):
+                                    file_path = os.path.join(directory, filename)
+                                    file_mtime = os.path.getmtime(file_path)
+                                    time_diff = current_time - file_mtime
+                                    logger.info(f"Found WAV file: {file_path}, modified {time_diff:.1f} seconds ago")
+                                    if time_diff < 120 and file_mtime > newest_time:  # Expanded search to 2 minutes
+                                        newest_time = file_mtime
+                                        newest_file = file_path
+                    
+                    # First check the exact patterns
+                    for path in potential_paths:
+                        # Handle glob patterns
+                        if '*' in path:
+                            matching_files = glob.glob(path)
+                            if matching_files:
+                                output_path = matching_files[0]
+                                logger.debug(f"Found output using glob pattern {path}: {output_path}")
+                                break
+                        elif os.path.exists(path):
+                            output_path = path
+                            logger.debug(f"Found output using pattern matching: {output_path}")
+                            break
+                    
+                    # If not found, use the newest file
+                    if (not output_path or not os.path.exists(output_path)) and newest_file:
+                        output_path = newest_file
+                        logger.info(f"Found newest wav file: {output_path}, modified {current_time - newest_time:.1f} seconds ago")
+            
+            # If still not found, try desperate measures: find any WAV file modified in the last 2 minutes
+            if not output_path or not os.path.exists(output_path):
+                logger.warning(f"No output file found using standard methods. Trying filesystem search...")
+                
+                # Run the find command to locate recently modified wav files
+                find_cmd = [
+                    "find", 
+                    "/tmp", "/home/tdeshane",  # Directories to search
+                    "-name", "*.wav",
+                    "-mmin", "-2",  # Modified in the last 2 minutes
+                    "-type", "f"    # Regular files only
+                ]
+                
+                try:
+                    # Run find command
+                    find_process = subprocess.Popen(
+                        find_cmd,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        text=True
+                    )
+                    
+                    find_stdout, find_stderr = find_process.communicate()
+                    
+                    if find_process.returncode == 0 and find_stdout:
+                        recent_wav_files = find_stdout.strip().split("\n")
+                        if recent_wav_files:
+                            # Find the most recently modified file
+                            most_recent = None
+                            most_recent_time = 0
+                            
+                            for file_path in recent_wav_files:
+                                if os.path.exists(file_path):
+                                    logger.info(f"Found recent WAV file: {file_path}")
+                                    file_mtime = os.path.getmtime(file_path)
+                                    if file_mtime > most_recent_time:
+                                        most_recent_time = file_mtime
+                                        most_recent = file_path
+                            
+                            if most_recent:
+                                output_path = most_recent
+                                logger.info(f"Using most recently modified WAV file: {output_path}")
+                    else:
+                        logger.warning(f"Find command failed or found no files: {find_stderr}")
+                
+                except Exception as e:
+                    logger.warning(f"Error running find command: {e}")
             
             if not output_path or not os.path.exists(output_path):
+                # Log the stdout again for reference
                 logger.error(f"Output file not found after exhaustive search for scene_id: {scene_id}")
+                logger.error(f"STDOUT content for reference: {stdout}")
                 return None, 0
             
             logger.info(f"Found generated speech at: {output_path}")
