@@ -56,7 +56,9 @@ document.addEventListener('DOMContentLoaded', () => {
             updateCharacterGrid();
         } catch (error) {
             console.error('Error initializing character showcase:', error);
-            characterGrid.innerHTML = `<div class="error-message">Error loading characters: ${error.message}</div>`;
+            if (characterGrid) {
+                characterGrid.innerHTML = `<div class="error-message">Error loading characters: ${error.message}</div>`;
+            }
         }
     }
 
@@ -74,15 +76,17 @@ document.addEventListener('DOMContentLoaded', () => {
             characters = await response.json();
             
             // Add placeholder images and sample URLs
-            characters.forEach(character => {
+            characters.forEach((character, index) => {
                 // Ensure required properties exist
-                character.name = character.name || `Voice ${character.speaker_id}`;
+                character.name = character.name || `Voice ${index + 1}`;
                 character.description = character.description || 'No description available';
                 character.gender = character.gender || 'neutral';
                 character.style = character.style || 'default';
+                character.speaker_id = character.speaker_id || (index + 1);
                 
                 // Generate placeholder image based on speaker ID
-                const imageId = (character.speaker_id % 10) + 1;
+                // Use a safe number for the image ID (1-5)
+                const imageId = (Math.abs(parseInt(character.speaker_id) % 5) || 1) + 1;
                 character.image_url = `/static/images/${character.gender}${imageId}.jpg`;
                 
                 // Add sample audio URL (this would be real in production)
@@ -100,43 +104,55 @@ document.addEventListener('DOMContentLoaded', () => {
      */
     function setupEventListeners() {
         // Filter change events
-        genderFilter.addEventListener('change', updateCharacterGrid);
-        styleFilter.addEventListener('change', updateCharacterGrid);
-        searchFilter.addEventListener('input', updateCharacterGrid);
+        if (genderFilter) genderFilter.addEventListener('change', updateCharacterGrid);
+        if (styleFilter) styleFilter.addEventListener('change', updateCharacterGrid);
+        if (searchFilter) searchFilter.addEventListener('input', updateCharacterGrid);
         
         // Modal events
-        closeModal.addEventListener('click', () => {
-            modal.style.display = 'none';
-            clearTaskCheckInterval();
-        });
-        
-        window.addEventListener('click', (event) => {
-            if (event.target === modal) {
-                modal.style.display = 'none';
+        if (closeModal) {
+            closeModal.addEventListener('click', () => {
+                if (modal) modal.style.display = 'none';
                 clearTaskCheckInterval();
-            }
-        });
+            });
+        }
+        
+        if (window) {
+            window.addEventListener('click', (event) => {
+                if (event.target === modal) {
+                    modal.style.display = 'none';
+                    clearTaskCheckInterval();
+                }
+            });
+        }
         
         // Range input value display
-        modalTemperature.addEventListener('input', () => {
-            modalTemperatureValue.textContent = modalTemperature.value;
-        });
+        if (modalTemperature && modalTemperatureValue) {
+            modalTemperature.addEventListener('input', () => {
+                modalTemperatureValue.textContent = modalTemperature.value;
+            });
+        }
         
-        modalTopK.addEventListener('input', () => {
-            modalTopKValue.textContent = modalTopK.value;
-        });
+        if (modalTopK && modalTopKValue) {
+            modalTopK.addEventListener('input', () => {
+                modalTopKValue.textContent = modalTopK.value;
+            });
+        }
         
         // Generate button
-        modalGenerateBtn.addEventListener('click', generateVoice);
+        if (modalGenerateBtn) {
+            modalGenerateBtn.addEventListener('click', generateVoice);
+        }
     }
 
     /**
      * Update the character grid based on filters
      */
     function updateCharacterGrid() {
-        const gender = genderFilter.value;
-        const style = styleFilter.value;
-        const searchTerm = searchFilter.value.toLowerCase();
+        if (!characterGrid) return;
+        
+        const gender = genderFilter ? genderFilter.value : 'all';
+        const style = styleFilter ? styleFilter.value : 'all';
+        const searchTerm = searchFilter ? searchFilter.value.toLowerCase() : '';
         
         // Clear the grid except for the template
         characterGrid.innerHTML = '';
@@ -170,7 +186,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Create and append character cards
         filteredCharacters.forEach(character => {
             const card = createCharacterCard(character);
-            characterGrid.appendChild(card);
+            if (card) characterGrid.appendChild(card);
         });
     }
 
@@ -178,60 +194,96 @@ document.addEventListener('DOMContentLoaded', () => {
      * Create a character card element
      */
     function createCharacterCard(character) {
+        if (!cardTemplate) return null;
+        
         // Clone the template
         const card = cardTemplate.content.cloneNode(true).querySelector('.character-card');
+        if (!card) return null;
         
         // Set data attributes
-        card.dataset.speakerId = character.speaker_id;
+        card.dataset.speakerId = character.speaker_id || '';
         card.dataset.gender = character.gender || 'neutral';
         card.dataset.style = character.style || 'default';
         
         // Set content
         const avatar = card.querySelector('.character-avatar img');
-        avatar.src = character.image_url;
-        avatar.alt = `${character.name} avatar`;
+        if (avatar) {
+            avatar.src = character.image_url || '/static/images/placeholder.jpg';
+            avatar.alt = `${character.name || 'Character'} avatar`;
+            
+            // Add error handler for image loading
+            avatar.onerror = function() {
+                this.src = '/static/images/placeholder.jpg';
+                this.onerror = null; // Prevent infinite loop
+            };
+        }
         
-        card.querySelector('.character-name').textContent = character.name;
-        card.querySelector('.character-description').textContent = character.description;
+        const nameElement = card.querySelector('.character-name');
+        if (nameElement) nameElement.textContent = character.name || 'Unnamed Character';
+        
+        const descElement = card.querySelector('.character-description');
+        if (descElement) descElement.textContent = character.description || 'No description available';
         
         const genderBadge = card.querySelector('.gender-badge');
-        const gender = character.gender || 'neutral';
-        genderBadge.textContent = gender.charAt(0).toUpperCase() + gender.slice(1);
+        if (genderBadge) {
+            const gender = character.gender || 'neutral';
+            genderBadge.textContent = gender.charAt(0).toUpperCase() + gender.slice(1);
+        }
         
         const styleBadge = card.querySelector('.style-badge');
-        const style = character.style || 'default';
-        styleBadge.textContent = style.charAt(0).toUpperCase() + style.slice(1);
+        if (styleBadge) {
+            const style = character.style || 'default';
+            styleBadge.textContent = style.charAt(0).toUpperCase() + style.slice(1);
+        }
         
         // Set up audio player
         const audio = card.querySelector('audio');
-        audio.src = character.sample_url;
+        if (audio) {
+            audio.src = character.sample_url || '';
+            
+            // Add error handler for audio loading
+            audio.onerror = function() {
+                console.warn(`Failed to load audio sample for ${character.name}`);
+                // Could set a default audio or disable the play button
+            };
+        }
         
         // Add event listeners
         const playButton = card.querySelector('.play-sample-btn');
-        playButton.addEventListener('click', () => {
-            const audioPlayer = card.querySelector('.audio-player');
-            
-            if (audioPlayer.classList.contains('active')) {
-                audioPlayer.classList.remove('active');
-                audio.pause();
-                audio.currentTime = 0;
-            } else {
-                // Hide all other audio players
-                document.querySelectorAll('.audio-player.active').forEach(player => {
-                    player.classList.remove('active');
-                    player.querySelector('audio').pause();
-                    player.querySelector('audio').currentTime = 0;
-                });
+        if (playButton && audio) {
+            playButton.addEventListener('click', () => {
+                const audioPlayer = card.querySelector('.audio-player');
+                if (!audioPlayer) return;
                 
-                audioPlayer.classList.add('active');
-                audio.play();
-            }
-        });
+                if (audioPlayer.classList.contains('active')) {
+                    audioPlayer.classList.remove('active');
+                    audio.pause();
+                    audio.currentTime = 0;
+                } else {
+                    // Hide all other audio players
+                    document.querySelectorAll('.audio-player.active').forEach(player => {
+                        player.classList.remove('active');
+                        const playerAudio = player.querySelector('audio');
+                        if (playerAudio) {
+                            playerAudio.pause();
+                            playerAudio.currentTime = 0;
+                        }
+                    });
+                    
+                    audioPlayer.classList.add('active');
+                    audio.play().catch(err => {
+                        console.error('Error playing audio:', err);
+                    });
+                }
+            });
+        }
         
         const generateButton = card.querySelector('.generate-btn');
-        generateButton.addEventListener('click', () => {
-            openCharacterModal(character);
-        });
+        if (generateButton) {
+            generateButton.addEventListener('click', () => {
+                openCharacterModal(character);
+            });
+        }
         
         return card;
     }
@@ -240,29 +292,49 @@ document.addEventListener('DOMContentLoaded', () => {
      * Open the character modal
      */
     function openCharacterModal(character) {
+        if (!modal) return;
+        
         // Set current speaker ID
         currentSpeakerId = character.speaker_id;
         
         // Reset modal state
-        modalResult.style.display = 'none';
-        modalResult.classList.remove('active');
-        modalAudioPlayer.style.display = 'none';
-        modalText.value = '';
+        if (modalResult) {
+            modalResult.style.display = 'none';
+            modalResult.classList.remove('active');
+        }
+        if (modalAudioPlayer) modalAudioPlayer.style.display = 'none';
+        if (modalText) modalText.value = '';
         
         // Set character details
-        modalCharacterName.textContent = character.name;
-        modalCharacterAvatar.src = character.image_url;
-        modalCharacterAvatar.alt = `${character.name} avatar`;
-        modalCharacterDescription.textContent = character.description;
+        if (modalCharacterName) modalCharacterName.textContent = character.name || 'Unnamed Character';
         
-        const gender = character.gender || 'neutral';
-        modalGenderBadge.textContent = gender.charAt(0).toUpperCase() + gender.slice(1);
+        if (modalCharacterAvatar) {
+            modalCharacterAvatar.src = character.image_url || '/static/images/placeholder.jpg';
+            modalCharacterAvatar.alt = `${character.name || 'Character'} avatar`;
+            
+            // Add error handler for image loading
+            modalCharacterAvatar.onerror = function() {
+                this.src = '/static/images/placeholder.jpg';
+                this.onerror = null; // Prevent infinite loop
+            };
+        }
         
-        const style = character.style || 'default';
-        modalStyleBadge.textContent = style.charAt(0).toUpperCase() + style.slice(1);
+        if (modalCharacterDescription) {
+            modalCharacterDescription.textContent = character.description || 'No description available';
+        }
+        
+        if (modalGenderBadge) {
+            const gender = character.gender || 'neutral';
+            modalGenderBadge.textContent = gender.charAt(0).toUpperCase() + gender.slice(1);
+        }
+        
+        if (modalStyleBadge) {
+            const style = character.style || 'default';
+            modalStyleBadge.textContent = style.charAt(0).toUpperCase() + style.slice(1);
+        }
         
         // Set default style
-        modalStyle.value = character.style || 'default';
+        if (modalStyle) modalStyle.value = character.style || 'default';
         
         // Show modal
         modal.style.display = 'block';
@@ -272,38 +344,41 @@ document.addEventListener('DOMContentLoaded', () => {
      * Generate a voice sample
      */
     async function generateVoice() {
-        // Validate input
-        if (!modalText.value.trim()) {
-            alert('Please enter some text to convert to speech');
+        if (!modalGenerateBtn || !modalText || !modalResult || !modalTaskStatus) return;
+        
+        const text = modalText.value.trim();
+        if (!text) {
+            alert('Please enter some text to generate');
             return;
         }
         
+        // Get parameters
+        const temperature = modalTemperature ? parseFloat(modalTemperature.value) : 0.7;
+        const topK = modalTopK ? parseInt(modalTopK.value) : 50;
+        const style = modalStyle ? modalStyle.value : 'default';
+        
+        // Disable generate button
+        modalGenerateBtn.disabled = true;
+        modalGenerateBtn.textContent = 'Generating...';
+        
+        // Show result section
+        modalResult.style.display = 'block';
+        modalTaskStatus.textContent = 'Initializing...';
+        
         try {
-            // Show result section
-            modalResult.style.display = 'block';
-            modalResult.classList.add('active');
-            modalTaskStatus.textContent = 'Processing...';
-            modalAudioPlayer.style.display = 'none';
-            
-            // Disable generate button
-            modalGenerateBtn.disabled = true;
-            
-            // Prepare request data
-            const requestData = {
-                text: modalText.value,
-                speaker_id: currentSpeakerId,
-                temperature: parseFloat(modalTemperature.value),
-                top_k: parseInt(modalTopK.value),
-                style: modalStyle.value
-            };
-            
             // Send request to API
             const response = await fetch('/api/generate', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify(requestData)
+                body: JSON.stringify({
+                    text: text,
+                    speaker_id: currentSpeakerId || '1',
+                    temperature: temperature,
+                    top_k: topK,
+                    style: style
+                })
             });
             
             if (!response.ok) {
@@ -314,24 +389,123 @@ document.addEventListener('DOMContentLoaded', () => {
             currentTaskId = data.task_id;
             
             // Start checking task status
-            startTaskStatusCheck();
+            modalTaskStatus.textContent = 'Processing...';
+            startTaskCheck();
             
         } catch (error) {
             console.error('Error generating voice:', error);
-            modalTaskStatus.textContent = `Error: ${error.message}`;
-            modalGenerateBtn.disabled = false;
+            if (modalTaskStatus) {
+                modalTaskStatus.textContent = `Error: ${error.message}`;
+                modalTaskStatus.classList.add('error');
+            }
+            
+            // Re-enable generate button
+            if (modalGenerateBtn) {
+                modalGenerateBtn.disabled = false;
+                modalGenerateBtn.textContent = 'Generate';
+            }
         }
     }
 
     /**
      * Start checking task status
      */
-    function startTaskStatusCheck() {
-        // Clear any existing interval
+    function startTaskCheck() {
         clearTaskCheckInterval();
         
-        // Set up new interval
-        taskCheckInterval = setInterval(checkTaskStatus, 1000);
+        taskCheckInterval = setInterval(async () => {
+            try {
+                await checkTaskStatus();
+            } catch (error) {
+                console.error('Error checking task status:', error);
+                if (modalTaskStatus) {
+                    modalTaskStatus.textContent = `Error: ${error.message}`;
+                    modalTaskStatus.classList.add('error');
+                }
+                clearTaskCheckInterval();
+                
+                // Re-enable generate button
+                if (modalGenerateBtn) {
+                    modalGenerateBtn.disabled = false;
+                    modalGenerateBtn.textContent = 'Generate';
+                }
+            }
+        }, 2000);
+    }
+
+    /**
+     * Check task status
+     */
+    async function checkTaskStatus() {
+        if (!currentTaskId) return;
+        
+        const response = await fetch(`/api/tasks/${currentTaskId}`);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! Status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        if (!modalTaskStatus) return;
+        
+        // Update status
+        modalTaskStatus.textContent = data.status;
+        
+        // If task is complete
+        if (data.status === 'completed') {
+            clearTaskCheckInterval();
+            
+            // Show audio player
+            if (modalAudioPlayer && modalVoiceAudio) {
+                modalAudioPlayer.style.display = 'block';
+                modalVoiceAudio.src = data.result_url;
+                modalVoiceAudio.load();
+                
+                // Add error handler for audio loading
+                modalVoiceAudio.onerror = function() {
+                    console.error('Error loading generated audio');
+                    if (modalTaskStatus) {
+                        modalTaskStatus.textContent = 'Error loading audio';
+                        modalTaskStatus.classList.add('error');
+                    }
+                };
+                
+                // Set download link
+                if (modalDownloadBtn && data.result_url) {
+                    modalDownloadBtn.href = data.result_url;
+                    modalDownloadBtn.download = `echoforge_${currentSpeakerId || 'voice'}_${Date.now()}.mp3`;
+                }
+                
+                // Set copy link data
+                if (modalCopyLinkBtn && data.result_url) {
+                    modalCopyLinkBtn.dataset.url = data.result_url;
+                }
+            }
+            
+            // Add active class to result
+            if (modalResult) {
+                modalResult.classList.add('active');
+            }
+            
+            // Re-enable generate button
+            if (modalGenerateBtn) {
+                modalGenerateBtn.disabled = false;
+                modalGenerateBtn.textContent = 'Generate Again';
+            }
+        } else if (data.status === 'failed') {
+            clearTaskCheckInterval();
+            
+            // Show error
+            modalTaskStatus.textContent = `Failed: ${data.error || 'Unknown error'}`;
+            modalTaskStatus.classList.add('error');
+            
+            // Re-enable generate button
+            if (modalGenerateBtn) {
+                modalGenerateBtn.disabled = false;
+                modalGenerateBtn.textContent = 'Try Again';
+            }
+        }
     }
 
     /**
@@ -345,69 +519,25 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     /**
-     * Check task status
+     * Copy URL to clipboard
      */
-    async function checkTaskStatus() {
-        if (!currentTaskId) return;
-        
-        try {
-            const response = await fetch(`/api/tasks/${currentTaskId}`);
+    if (modalCopyLinkBtn) {
+        modalCopyLinkBtn.addEventListener('click', () => {
+            const url = modalCopyLinkBtn.dataset.url;
+            if (!url) return;
             
-            if (!response.ok) {
-                throw new Error(`HTTP error! Status: ${response.status}`);
-            }
-            
-            const task = await response.json();
-            
-            // Update status display
-            modalTaskStatus.textContent = `Status: ${task.status}`;
-            
-            // Handle completed task
-            if (task.status === 'completed') {
-                clearTaskCheckInterval();
-                modalGenerateBtn.disabled = false;
-                
-                // Set audio source
-                modalVoiceAudio.src = task.result.file_url;
-                
-                // Show audio player
-                modalAudioPlayer.style.display = 'block';
-                
-                // Set up download button
-                modalDownloadBtn.onclick = () => {
-                    const a = document.createElement('a');
-                    a.href = task.result.file_url;
-                    a.download = task.result.file_url.split('/').pop();
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
-                };
-                
-                // Set up copy link button
-                modalCopyLinkBtn.onclick = () => {
-                    const fullUrl = window.location.origin + task.result.file_url;
-                    navigator.clipboard.writeText(fullUrl)
-                        .then(() => {
-                            alert('Link copied to clipboard!');
-                        })
-                        .catch(err => {
-                            console.error('Could not copy text: ', err);
-                        });
-                };
-            }
-            
-            // Handle error
-            if (task.status === 'error') {
-                clearTaskCheckInterval();
-                modalTaskStatus.textContent = `Error: ${task.error}`;
-                modalGenerateBtn.disabled = false;
-            }
-            
-        } catch (error) {
-            console.error('Error checking task status:', error);
-            modalTaskStatus.textContent = `Error checking status: ${error.message}`;
-            clearTaskCheckInterval();
-            modalGenerateBtn.disabled = false;
-        }
+            navigator.clipboard.writeText(url)
+                .then(() => {
+                    const originalText = modalCopyLinkBtn.textContent;
+                    modalCopyLinkBtn.textContent = 'Copied!';
+                    setTimeout(() => {
+                        modalCopyLinkBtn.textContent = originalText;
+                    }, 2000);
+                })
+                .catch(err => {
+                    console.error('Failed to copy URL:', err);
+                    alert('Failed to copy URL to clipboard');
+                });
+        });
     }
 }); 

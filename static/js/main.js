@@ -26,13 +26,13 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentTaskId = null;
     let statusCheckInterval = null;
 
-    // Event Listeners
-    voiceForm.addEventListener('submit', handleFormSubmit);
-    temperatureSlider.addEventListener('input', updateTemperatureValue);
-    topKSlider.addEventListener('input', updateTopKValue);
-    downloadBtn.addEventListener('click', downloadAudio);
-    copyLinkBtn.addEventListener('click', copyAudioLink);
-    themeToggle.addEventListener('click', toggleTheme);
+    // Event Listeners - Add null checks to prevent errors
+    if (voiceForm) voiceForm.addEventListener('submit', handleFormSubmit);
+    if (temperatureSlider) temperatureSlider.addEventListener('input', updateTemperatureValue);
+    if (topKSlider) topKSlider.addEventListener('input', updateTopKValue);
+    if (downloadBtn) downloadBtn.addEventListener('click', downloadAudio);
+    if (copyLinkBtn) copyLinkBtn.addEventListener('click', copyAudioLink);
+    if (themeToggle) themeToggle.addEventListener('click', toggleTheme);
 
     // Initialize theme from localStorage
     initTheme();
@@ -41,7 +41,9 @@ document.addEventListener('DOMContentLoaded', () => {
     function initTheme() {
         const savedTheme = localStorage.getItem('theme') || 'light';
         document.documentElement.setAttribute('data-theme', savedTheme);
-        updateThemeIcon(savedTheme);
+        if (themeToggleIcon) {
+            updateThemeIcon(savedTheme);
+        }
     }
 
     function toggleTheme() {
@@ -50,20 +52,28 @@ document.addEventListener('DOMContentLoaded', () => {
         
         document.documentElement.setAttribute('data-theme', newTheme);
         localStorage.setItem('theme', newTheme);
-        updateThemeIcon(newTheme);
+        if (themeToggleIcon) {
+            updateThemeIcon(newTheme);
+        }
     }
 
     function updateThemeIcon(theme) {
-        themeToggleIcon.textContent = theme === 'light' ? '🌙' : '☀️';
+        if (themeToggleIcon) {
+            themeToggleIcon.textContent = theme === 'light' ? '🌙' : '☀️';
+        }
     }
 
     // Update slider values
     function updateTemperatureValue() {
-        temperatureValue.textContent = temperatureSlider.value;
+        if (temperatureValue) {
+            temperatureValue.textContent = temperatureSlider.value;
+        }
     }
 
     function updateTopKValue() {
-        topKValue.textContent = topKSlider.value;
+        if (topKValue) {
+            topKValue.textContent = topKSlider.value;
+        }
     }
 
     // Handle form submission
@@ -71,13 +81,15 @@ document.addEventListener('DOMContentLoaded', () => {
         event.preventDefault();
         
         // Disable the generate button
-        generateBtn.disabled = true;
-        generateBtn.textContent = 'Generating...';
+        if (generateBtn) {
+            generateBtn.disabled = true;
+            generateBtn.textContent = 'Generating...';
+        }
         
         // Show results section with processing status
-        resultsSection.style.display = 'block';
-        taskStatus.textContent = 'Processing your request...';
-        audioPlayer.style.display = 'none';
+        if (resultsSection) resultsSection.style.display = 'block';
+        if (taskStatus) taskStatus.textContent = 'Processing your request...';
+        if (audioPlayer) audioPlayer.style.display = 'none';
         
         // Get form data
         const formData = new FormData(voiceForm);
@@ -111,7 +123,7 @@ document.addEventListener('DOMContentLoaded', () => {
             
         } catch (error) {
             console.error('Error generating voice:', error);
-            taskStatus.textContent = `Error: ${error.message}`;
+            if (taskStatus) taskStatus.textContent = `Error: ${error.message}`;
             resetGenerateButton();
         }
     }
@@ -128,7 +140,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const taskData = await response.json();
             
             // Update status message
-            taskStatus.textContent = `Status: ${taskData.status}`;
+            if (taskStatus) taskStatus.textContent = `Status: ${taskData.status}`;
             
             // Check if task is complete
             if (taskData.status === 'completed') {
@@ -136,16 +148,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 // Set audio source
                 const fileUrl = taskData.file_url || taskData.result?.file_url;
-                if (fileUrl) {
+                if (fileUrl && voiceAudio && audioPlayer) {
                     voiceAudio.src = fileUrl;
                     audioPlayer.style.display = 'block';
                     
                     // Set download and copy link data
-                    downloadBtn.dataset.url = fileUrl;
-                    copyLinkBtn.dataset.url = window.location.origin + fileUrl;
+                    if (downloadBtn) downloadBtn.dataset.url = fileUrl;
+                    if (copyLinkBtn) copyLinkBtn.dataset.url = window.location.origin + fileUrl;
                     
-                    taskStatus.textContent = 'Voice generation complete!';
-                } else {
+                    if (taskStatus) taskStatus.textContent = 'Voice generation complete!';
+                } else if (taskStatus) {
                     taskStatus.textContent = 'Voice generated but no file URL was returned.';
                 }
                 
@@ -153,13 +165,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 
             } else if (taskData.status === 'failed') {
                 clearInterval(statusCheckInterval);
-                taskStatus.textContent = `Generation failed: ${taskData.error || 'Unknown error'}`;
+                if (taskStatus) taskStatus.textContent = `Generation failed: ${taskData.error || 'Unknown error'}`;
                 resetGenerateButton();
             }
             
         } catch (error) {
             console.error('Error checking task status:', error);
-            taskStatus.textContent = `Error checking status: ${error.message}`;
+            if (taskStatus) taskStatus.textContent = `Error checking status: ${error.message}`;
             clearInterval(statusCheckInterval);
             resetGenerateButton();
         }
@@ -167,12 +179,16 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Reset generate button
     function resetGenerateButton() {
-        generateBtn.disabled = false;
-        generateBtn.textContent = 'Generate Voice';
+        if (generateBtn) {
+            generateBtn.disabled = false;
+            generateBtn.textContent = 'Generate Voice';
+        }
     }
     
     // Download audio
     function downloadAudio() {
+        if (!downloadBtn) return;
+        
         const url = downloadBtn.dataset.url;
         if (url) {
             const link = document.createElement('a');
@@ -186,6 +202,8 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Copy audio link
     function copyAudioLink() {
+        if (!copyLinkBtn) return;
+        
         const url = copyLinkBtn.dataset.url;
         if (url) {
             navigator.clipboard.writeText(url)
@@ -203,18 +221,11 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // Apply saved theme preference on page load
-    const savedTheme = localStorage.getItem('theme');
-    if (savedTheme) {
-        document.documentElement.setAttribute('data-theme', savedTheme);
-        if (themeToggleIcon) {
-            themeToggleIcon.textContent = savedTheme === 'dark' ? '☀️' : '🌙';
-        }
-    }
-    
     // Range input value display
     document.querySelectorAll('input[type="range"]').forEach(range => {
-        const valueDisplay = range.parentElement.querySelector('.parameter-value');
+        if (!range) return;
+        
+        const valueDisplay = range.parentElement?.querySelector('.parameter-value');
         if (valueDisplay) {
             // Update value display on input change
             range.addEventListener('input', () => {
