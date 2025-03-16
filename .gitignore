@@ -87,8 +87,8 @@ source.env
 *.bin
 *.ckpt
 *.safetensors
-models/
-checkpoints/
+/models/
+/checkpoints/
 
 # Database files
 *.sqlite3
