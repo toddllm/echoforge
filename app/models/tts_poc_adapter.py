@@ -13,6 +13,7 @@ import json
 import time
 import shutil
 import torch
+import glob
 from pathlib import Path
 from typing import Optional, Tuple, Dict, Any
 
@@ -203,6 +204,9 @@ class TTSPOCAdapter:
             if stderr:
                 logger.debug(f"STDERR: {stderr}")
             
+            # Wait a moment to ensure file system operations complete
+            time.sleep(1)
+            
             # Look for the output file
             output_path = None
             
@@ -217,6 +221,18 @@ class TTSPOCAdapter:
                             logger.debug(f"Found output path from stdout: {output_path}")
                             break
             
+            # Debug: List all WAV files in the temp directory
+            logger.info(f"Checking for WAV files in temp directory: {self.temp_output_dir}")
+            temp_wav_files = glob.glob(os.path.join(self.temp_output_dir, "*.wav"))
+            for wav_file in temp_wav_files:
+                logger.info(f"Found WAV file in temp dir: {wav_file}")
+            
+            # Debug: List all WAV files in the voice_poc directory
+            logger.info(f"Checking for WAV files in voice_poc directory: {VOICE_POC_PATH}")
+            voice_poc_wav_files = glob.glob(os.path.join(VOICE_POC_PATH, "*.wav"))
+            for wav_file in voice_poc_wav_files:
+                logger.info(f"Found WAV file in voice_poc dir: {wav_file}")
+            
             # If we didn't find it in stdout, check various locations
             if not output_path or not os.path.exists(output_path):
                 # Try standard patterns in our temp directory
@@ -225,7 +241,9 @@ class TTSPOCAdapter:
                     os.path.join(self.temp_output_dir, f"scene{scene_id}.wav"),
                     os.path.join(self.temp_output_dir, f"{scene_id}.wav"),
                     os.path.join(VOICE_POC_PATH, f"output_{scene_id}.wav"),
-                    os.path.join(VOICE_POC_PATH, f"scene_{scene_id}.wav")
+                    os.path.join(VOICE_POC_PATH, f"scene_{scene_id}.wav"),
+                    os.path.join(VOICE_POC_PATH, f"scene_{scene_id}_*.wav"),  # Using glob pattern
+                    os.path.join(self.temp_output_dir, f"voice_{scene_id}.wav")
                 ]
                 
                 # Also check the original movie_maker paths as fallback
@@ -246,22 +264,38 @@ class TTSPOCAdapter:
                     os.path.join(MOVIE_MAKER_PATH, "hdmy5movie_voices", "scenes")
                 ]
                 
+                # Add the parent directory of VOICE_POC_PATH
+                directories_to_check.append(os.path.dirname(VOICE_POC_PATH))
+                
+                # Consider looking in current directory too
+                directories_to_check.append(os.getcwd())
+                
                 newest_file = None
                 newest_time = 0
                 
                 for directory in directories_to_check:
                     if os.path.exists(directory):
+                        logger.info(f"Checking directory for WAV files: {directory}")
                         for filename in os.listdir(directory):
                             if filename.endswith('.wav'):
                                 file_path = os.path.join(directory, filename)
                                 file_mtime = os.path.getmtime(file_path)
-                                if current_time - file_mtime < 60 and file_mtime > newest_time:
+                                time_diff = current_time - file_mtime
+                                logger.info(f"Found WAV file: {file_path}, modified {time_diff:.1f} seconds ago")
+                                if time_diff < 60 and file_mtime > newest_time:
                                     newest_time = file_mtime
                                     newest_file = file_path
                 
                 # First check the exact patterns
                 for path in potential_paths:
-                    if os.path.exists(path):
+                    # Handle glob patterns
+                    if '*' in path:
+                        matching_files = glob.glob(path)
+                        if matching_files:
+                            output_path = matching_files[0]
+                            logger.debug(f"Found output using glob pattern {path}: {output_path}")
+                            break
+                    elif os.path.exists(path):
                         output_path = path
                         logger.debug(f"Found output using pattern matching: {output_path}")
                         break
@@ -269,10 +303,10 @@ class TTSPOCAdapter:
                 # If not found, use the newest file
                 if (not output_path or not os.path.exists(output_path)) and newest_file:
                     output_path = newest_file
-                    logger.debug(f"Found newest wav file: {output_path}")
+                    logger.info(f"Found newest wav file: {output_path}, modified {current_time - newest_time:.1f} seconds ago")
             
             if not output_path or not os.path.exists(output_path):
-                logger.error(f"Output file not found after exhaustive search")
+                logger.error(f"Output file not found after exhaustive search for scene_id: {scene_id}")
                 return None, 0
             
             logger.info(f"Found generated speech at: {output_path}")
@@ -296,7 +330,7 @@ class TTSPOCAdapter:
                 return audio.squeeze(), sample_rate
                 
             except Exception as e:
-                logger.error(f"Error loading audio file: {e}")
+                logger.error(f"Error loading audio file {output_path}: {e}")
                 return None, 0
             
         except Exception as e:
@@ -391,6 +425,9 @@ class TTSPOCAdapter:
                 return None, 0
             
             logger.info(f"TTS POC generation command succeeded")
+            
+            # Wait a moment to ensure file system operations complete
+            time.sleep(1)
             
             # Check if the output file exists
             if not os.path.exists(final_output):
