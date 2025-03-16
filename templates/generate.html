@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title | default('Generate Speech - EchoForge') }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <header>
+        <div class="header-container">
+            <div class="logo">
+                <a href="{{ url_for('ui.index') }}">
+                    <span class="logo-text">EchoForge</span>
+                </a>
+            </div>
+            <nav>
+                <ul>
+                    <li><a href="{{ url_for('ui.voices') }}">Voice Library</a></li>
+                    <li><a href="{{ url_for('ui.create') }}">Create Character</a></li>
+                    <li><a href="{{ url_for('ui.generate') }}" class="active">Generate Speech</a></li>
+                    <li><a href="{{ url_for('ui.docs') }}">API Docs</a></li>
+                    <li><a href="{{ url_for('ui.about') }}">About</a></li>
+                </ul>
+            </nav>
+        </div>
+    </header>
+
+    <main>
+        <section class="page-header">
+            <div class="container">
+                <h1>Generate Character Speech</h1>
+                <p>Convert text to speech using your character voices.</p>
+            </div>
+        </section>
+
+        <section class="generate-content">
+            <div class="container">
+                <div class="message-container" id="message-container"></div>
+
+                <div class="panel">
+                    <h2 class="panel-title">Text to Speech</h2>
+
+                    <form id="generation-form">
+                        <div class="form-group">
+                            <label for="voice-select">Select Voice:</label>
+                            <select id="voice-select" required>
+                                <option value="">-- Select a Voice --</option>
+                                <!-- Voice options will be loaded dynamically -->
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="text-input">Enter Text:</label>
+                            <textarea id="text-input" rows="6" placeholder="Enter text to convert to speech..." required></textarea>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="device-select">Processing Device:</label>
+                            <select id="device-select">
+                                <option value="auto">Auto (Prefer GPU)</option>
+                                <option value="cuda">CUDA (GPU only)</option>
+                                <option value="cpu">CPU only</option>
+                            </select>
+                        </div>
+
+                        <div class="progress-container" id="progress-container" style="display: none;">
+                            <div class="progress-bar-container">
+                                <div class="progress-bar-background">
+                                    <div class="progress-bar-indicator" id="generation-progress"></div>
+                                </div>
+                            </div>
+                            <p class="progress-text">Generating speech...</p>
+                        </div>
+
+                        <div class="form-actions">
+                            <button type="submit" class="btn btn-primary">Generate Speech</button>
+                        </div>
+                    </form>
+                </div>
+
+                <div id="result-container" style="display: none;"></div>
+
+                <div class="voice-info-panel panel">
+                    <h3 class="panel-title">Voice Information</h3>
+                    <div id="voice-info">
+                        <p>Select a voice to see its details.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <div class="footer-container">
+            <div class="footer-logo">
+                <span class="logo-text">EchoForge</span>
+            </div>
+            <div class="footer-links">
+                <div class="footer-section">
+                    <h4>Explore</h4>
+                    <ul>
+                        <li><a href="{{ url_for('ui.voices') }}">Voice Library</a></li>
+                        <li><a href="{{ url_for('ui.create') }}">Create Character</a></li>
+                        <li><a href="{{ url_for('ui.generate') }}">Generate Speech</a></li>
+                    </ul>
+                </div>
+                <div class="footer-section">
+                    <h4>Resources</h4>
+                    <ul>
+                        <li><a href="{{ url_for('ui.docs') }}">API Documentation</a></li>
+                        <li><a href="#">Tutorials</a></li>
+                        <li><a href="#">Examples</a></li>
+                    </ul>
+                </div>
+                <div class="footer-section">
+                    <h4>About</h4>
+                    <ul>
+                        <li><a href="{{ url_for('ui.about') }}">About Us</a></li>
+                        <li><a href="#">Contact</a></li>
+                        <li><a href="#">Privacy Policy</a></li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        <div class="copyright">
+            <p>&copy; 2025 EchoForge. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    <script>
+        // Load available voices when the page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            loadVoices();
+            
+            // Add voice select change handler
+            const voiceSelect = document.getElementById('voice-select');
+            if (voiceSelect) {
+                voiceSelect.addEventListener('change', function() {
+                    updateVoiceInfo(this.value);
+                });
+            }
+        });
+        
+        // Load available voices from the API
+        function loadVoices() {
+            fetch('/api/voices')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Failed to load voices');
+                    }
+                    return response.json();
+                })
+                .then(voices => {
+                    const voiceSelect = document.getElementById('voice-select');
+                    if (!voiceSelect) return;
+                    
+                    // Clear existing options (except first)
+                    while (voiceSelect.options.length > 1) {
+                        voiceSelect.remove(1);
+                    }
+                    
+                    // Group voices by gender
+                    const maleVoices = voices.filter(v => v.gender === 'male');
+                    const femaleVoices = voices.filter(v => v.gender === 'female');
+                    const otherVoices = voices.filter(v => v.gender !== 'male' && v.gender !== 'female');
+                    
+                    // Add male voices
+                    if (maleVoices.length > 0) {
+                        const maleGroup = document.createElement('optgroup');
+                        maleGroup.label = 'Male Voices';
+                        
+                        maleVoices.forEach(voice => {
+                            const option = document.createElement('option');
+                            option.value = voice.filepath;
+                            option.textContent = voice.character_name || `Speaker ${voice.speaker_id} - ${voice.style}`;
+                            option.dataset.voiceData = JSON.stringify(voice);
+                            maleGroup.appendChild(option);
+                        });
+                        
+                        voiceSelect.appendChild(maleGroup);
+                    }
+                    
+                    // Add female voices
+                    if (femaleVoices.length > 0) {
+                        const femaleGroup = document.createElement('optgroup');
+                        femaleGroup.label = 'Female Voices';
+                        
+                        femaleVoices.forEach(voice => {
+                            const option = document.createElement('option');
+                            option.value = voice.filepath;
+                            option.textContent = voice.character_name || `Speaker ${voice.speaker_id} - ${voice.style}`;
+                            option.dataset.voiceData = JSON.stringify(voice);
+                            femaleGroup.appendChild(option);
+                        });
+                        
+                        voiceSelect.appendChild(femaleGroup);
+                    }
+                    
+                    // Add other voices
+                    if (otherVoices.length > 0) {
+                        const otherGroup = document.createElement('optgroup');
+                        otherGroup.label = 'Other Voices';
+                        
+                        otherVoices.forEach(voice => {
+                            const option = document.createElement('option');
+                            option.value = voice.filepath;
+                            option.textContent = voice.character_name || `Speaker ${voice.speaker_id} - ${voice.style}`;
+                            option.dataset.voiceData = JSON.stringify(voice);
+                            otherGroup.appendChild(option);
+                        });
+                        
+                        voiceSelect.appendChild(otherGroup);
+                    }
+                    
+                    // Show message if no voices found
+                    if (voices.length === 0) {
+                        const noVoiceOption = document.createElement('option');
+                        noVoiceOption.disabled = true;
+                        noVoiceOption.textContent = 'No voices available';
+                        voiceSelect.appendChild(noVoiceOption);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading voices:', error);
+                    showMessage('Failed to load voices: ' + error.message, 'error');
+                });
+        }
+        
+        // Update voice info display
+        function updateVoiceInfo(voicePath) {
+            const voiceSelect = document.getElementById('voice-select');
+            const voiceInfoContainer = document.getElementById('voice-info');
+            
+            if (!voiceSelect || !voiceInfoContainer) return;
+            
+            // Get selected option
+            const selectedOption = Array.from(voiceSelect.options).find(option => option.value === voicePath);
+            
+            if (!selectedOption || !selectedOption.dataset.voiceData) {
+                voiceInfoContainer.innerHTML = '<p>No voice information available.</p>';
+                return;
+            }
+            
+            // Parse voice data
+            try {
+                const voice = JSON.parse(selectedOption.dataset.voiceData);
+                
+                // Build info HTML
+                let infoHTML = `
+                    <div class="voice-info-content">
+                        <h4>${voice.character_name || `Speaker ${voice.speaker_id}`}</h4>
+                        <p class="voice-role">${voice.character_role || `${voice.gender.charAt(0).toUpperCase() + voice.gender.slice(1)} Voice`}</p>
+                        
+                        <div class="voice-description">
+                            <p>${voice.character_description || `A ${voice.gender} voice with speaker ID ${voice.speaker_id} using ${voice.style} style.`}</p>
+                        </div>
+                        
+                        <div class="voice-parameters">
+                            <h5>Voice Parameters:</h5>
+                            <ul>
+                                <li><strong>Speaker ID:</strong> ${voice.speaker_id}</li>
+                                <li><strong>Gender:</strong> ${voice.gender.charAt(0).toUpperCase() + voice.gender.slice(1)}</li>
+                                <li><strong>Style:</strong> ${voice.style}</li>
+                                <li><strong>Temperature:</strong> ${voice.temperature}</li>
+                                <li><strong>Top-K:</strong> ${voice.topk}</li>
+                            </ul>
+                        </div>
+                    </div>
+                `;
+                
+                voiceInfoContainer.innerHTML = infoHTML;
+            } catch (error) {
+                console.error('Error parsing voice data:', error);
+                voiceInfoContainer.innerHTML = '<p>Error loading voice information.</p>';
+            }
+        }
+    </script>
+</body>
+</html> 
