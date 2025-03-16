@@ -3,9 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Generate Voice - EchoForge</title>
+    <title>EchoForge - Voice Generation</title>
     <link rel="stylesheet" href="{{ url_for('static', path='/css/styles.css') }}">
     <link rel="icon" href="{{ url_for('static', path='/img/favicon.ico') }}" type="image/x-icon">
+    <script src="{{ url_for('static', path='/js/main.js') }}" defer></script>
 </head>
 <body>
     <header>
@@ -40,11 +41,21 @@
                     </div>
 
                     <div class="form-group">
-                        <label for="character-select">Character Voice</label>
-                        <select id="character-select" name="speaker_id">
-                            <option value="1">Commander (Male)</option>
-                            <option value="2">Scholar (Female)</option>
+                        <label for="speaker_id">Character Voice</label>
+                        <select id="speaker_id" name="speaker_id" class="form-control" required>
+                            <option value="" disabled selected>Select a voice</option>
+                            <!-- Voice options will be populated by JavaScript -->
                         </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="device">Processing Device</label>
+                        <select id="device" name="device" class="form-control">
+                            <option value="auto">Auto (Default)</option>
+                            <option value="cuda">GPU (CUDA)</option>
+                            <option value="cpu">CPU</option>
+                        </select>
+                        <small class="form-text text-muted">Select the device to use for voice generation. Auto will use GPU if available.</small>
                     </div>
 
                     <div class="form-group parameters">
@@ -66,14 +77,6 @@
                                 <span class="parameter-value">50</span>
                             </div>
                             <p class="parameter-info">Limits token selection to the top K most likely tokens.</p>
-                        </div>
-
-                        <div class="parameter-group">
-                            <label for="device">Processing Device</label>
-                            <select id="device" name="device">
-                                <option value="cuda">GPU (if available)</option>
-                                <option value="cpu">CPU</option>
-                            </select>
                         </div>
                     </div>
 
@@ -139,7 +142,6 @@
         </div>
     </footer>
 
-    <script src="{{ url_for('static', path='/js/main.js') }}"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             const form = document.getElementById('generation-form');

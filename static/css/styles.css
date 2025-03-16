@@ -4,35 +4,52 @@
  * Supports both light and dark modes
  */
 
-/* Base styles and reset */
+/* Add CSS variables for light and dark mode */
 :root {
-    /* Light theme variables */
-    --primary-color: #4a6baf;
-    --primary-dark: #3a7bc8;
+    /* Light mode (default) */
+    --bg-color: #f5f7fa;
+    --card-bg: #ffffff;
+    --text-color: #333333;
+    --text-secondary: #666666;
+    --border-color: #e0e0e0;
+    --input-bg: #ffffff;
+    --hover-color: #f0f0f0;
+    --primary-color: #4a6cf7;
+    --primary-dark: #3a5ce5;
     --secondary-color: #6c757d;
+    --secondary-dark: #5a6268;
+    --accent-color: #ff6b6b;
     --success-color: #28a745;
+    --error-color: #dc3545;
     --warning-color: #ffc107;
-    --danger-color: #dc3545;
     --light-color: #f8f9fa;
     --dark-color: #343a40;
-    --text-color: #333;
     --background-color: #f8f9fa;
     --card-background: #ffffff;
-    --border-color: #dee2e6;
     --border-radius: 6px;
     --box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
     --transition: all 0.3s ease;
 }
 
-/* Dark theme variables */
-html[data-theme="dark"] {
-    --primary-color: #5d7fc9;
-    --primary-dark: #4a6baf;
-    --secondary-color: #8c959d;
-    --text-color: #e1e1e1;
+/* Dark mode */
+[data-theme="dark"] {
+    --bg-color: #1a1a2e;
+    --card-bg: #252541;
+    --text-color: #e6e6e6;
+    --text-secondary: #b0b0b0;
+    --border-color: #444444;
+    --input-bg: #333355;
+    --hover-color: #333355;
+    --primary-color: #6a8af7;
+    --primary-dark: #5a7ae5;
+    --secondary-color: #8c97ad;
+    --secondary-dark: #7a8798;
+    --accent-color: #ff8b8b;
+    --success-color: #48c774;
+    --error-color: #f14668;
+    --warning-color: #ffdd57;
     --background-color: #1a1a1a;
     --card-background: #2a2a2a;
-    --border-color: #444;
     --box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
 }
 
@@ -43,13 +60,13 @@ html[data-theme="dark"] {
 }
 
 body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen,
-        Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     line-height: 1.6;
-    color: var(--text-color);
-    background-color: var(--background-color);
+    margin: 0;
     padding: 0;
-    transition: background-color 0.3s ease, color 0.3s ease;
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    transition: background-color 0.3s, color 0.3s;
 }
 
 .container {
@@ -152,10 +169,49 @@ h2 {
     margin-bottom: 1.5rem;
 }
 
-label {
+.form-group label {
     display: block;
     margin-bottom: 0.5rem;
-    font-weight: 500;
+    font-weight: 600;
+}
+
+.form-group select.form-control {
+    width: 100%;
+    padding: 0.75rem;
+    border-radius: 0.5rem;
+    border: 1px solid var(--border-color);
+    background-color: var(--input-bg);
+    color: var(--text-color);
+    font-size: 1rem;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.form-group select.form-control:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 2px rgba(var(--primary-rgb), 0.25);
+    outline: none;
+}
+
+.form-group .form-text {
+    font-size: 0.875rem;
+    color: var(--text-muted);
+    margin-top: 0.25rem;
+}
+
+/* Ensure proper styling for dark mode */
+[data-theme="dark"] .form-group select.form-control {
+    background-color: var(--input-bg-dark);
+    border-color: var(--border-color-dark);
+    color: var(--text-color-light);
+}
+
+[data-theme="dark"] .form-group select.form-control:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 2px rgba(var(--primary-rgb), 0.4);
+}
+
+[data-theme="dark"] .form-group .form-text {
+    color: var(--text-muted-dark);
 }
 
 textarea, select {

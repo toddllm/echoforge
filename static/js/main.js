@@ -21,6 +21,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const copyLinkBtn = document.getElementById('copy-link-btn');
     const themeToggle = document.getElementById('theme-toggle');
     const themeToggleIcon = document.getElementById('theme-toggle-icon');
+    const speakerSelect = document.getElementById('speaker_id');
 
     // Variables
     let currentTaskId = null;
@@ -36,6 +37,46 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Initialize theme from localStorage
     initTheme();
+    
+    // Load available voices if on the generate page
+    if (speakerSelect) {
+        loadVoices();
+    }
+    
+    // Load voices from API
+    async function loadVoices() {
+        try {
+            const response = await fetch('/api/voices');
+            if (!response.ok) {
+                throw new Error(`Server responded with status: ${response.status}`);
+            }
+            
+            const voices = await response.json();
+            
+            // Clear existing options except the placeholder
+            while (speakerSelect.options.length > 1) {
+                speakerSelect.remove(1);
+            }
+            
+            // Add voice options
+            voices.forEach(voice => {
+                const option = document.createElement('option');
+                option.value = voice.speaker_id;
+                option.textContent = `${voice.name} (${voice.gender || 'Unknown'})`;
+                speakerSelect.appendChild(option);
+            });
+            
+            // Enable the select
+            speakerSelect.disabled = false;
+        } catch (error) {
+            console.error('Error loading voices:', error);
+            // Add a fallback option if voices can't be loaded
+            const option = document.createElement('option');
+            option.value = "1";
+            option.textContent = "Default Voice";
+            speakerSelect.appendChild(option);
+        }
+    }
 
     // Theme functions
     function initTheme() {
@@ -98,7 +139,8 @@ document.addEventListener('DOMContentLoaded', () => {
             speaker_id: parseInt(formData.get('speaker_id')),
             temperature: parseFloat(formData.get('temperature')),
             top_k: parseInt(formData.get('top_k')),
-            style: formData.get('style')
+            style: formData.get('style') || 'default',
+            device: formData.get('device') || 'auto'
         };
         
         try {
