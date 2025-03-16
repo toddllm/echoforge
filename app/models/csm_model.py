@@ -352,8 +352,12 @@ class CSMModel:
         if max_audio_length_ms is None:
             max_audio_length_ms = 90000  # 90 seconds
         
+        # Flag to track if we've tried the TTS POC adapter
+        tried_tts_poc = False
+        
         if hasattr(self, 'tts_poc_adapter') and self.tts_poc_adapter.available:
             # Use the TTS POC adapter
+            tried_tts_poc = True
             logger.info(f"Generating speech for text: '{text}' with speaker_id={speaker_id}, "
                       f"temperature={temperature}, top_k={top_k}, device={device} using TTS POC adapter")
             
@@ -370,15 +374,20 @@ class CSMModel:
                 return audio, sample_rate
             else:
                 logger.warning("TTS POC adapter failed to generate speech, falling back to basic implementation")
-                # Fall back to basic implementation
-                # Make sure we have a basic implementation available
-                if not hasattr(self, 'generator'):
+                # Make sure the basic implementation is initialized
+                if not hasattr(self, 'generator') or self.generator is None:
+                    logger.info("Initializing basic TTS implementation for fallback")
                     self._initialize_basic_tts()
         
-        # Use the basic implementation or fallback
+        # Use the basic implementation (either as primary or fallback)
         try:
+            # Check if we have a generator, if not initialize it
+            if not hasattr(self, 'generator') or self.generator is None:
+                logger.info("Initializing basic TTS implementation")
+                self._initialize_basic_tts()
+            
             logger.info(f"Generating speech for text: '{text}' with speaker_id={speaker_id}, "
-                      f"temperature={temperature}, top_k={top_k}, device={device}")
+                      f"temperature={temperature}, top_k={top_k}, device={device or self.device} using basic TTS")
             
             # Generate the speech
             audio = self.generator.generate(
@@ -397,6 +406,28 @@ class CSMModel:
             
         except Exception as e:
             logger.error(f"Error generating speech: {e}")
+            
+            # If we already tried TTS POC and we're also failing with the basic implementation,
+            # there's nothing else to try
+            if tried_tts_poc:
+                raise CSMModelError(f"Both TTS POC adapter and basic implementation failed to generate speech: {e}")
+                
+            # If we haven't tried TTS POC yet but it's available, try it as a last resort
+            if hasattr(self, 'tts_poc_adapter') and self.tts_poc_adapter.available and not tried_tts_poc:
+                logger.info("Basic implementation failed, trying TTS POC adapter as fallback")
+                audio, sample_rate = self.tts_poc_adapter.generate_speech(
+                    text=text,
+                    speaker_id=speaker_id,
+                    temperature=temperature,
+                    top_k=top_k,
+                    device="cpu"  # Force CPU for reliability
+                )
+                
+                if audio is not None:
+                    logger.info(f"Successfully generated audio with TTS POC adapter fallback")
+                    return audio, sample_rate
+            
+            # If we get here, all generation attempts have failed
             raise CSMModelError(f"Could not generate speech: {e}")
     
     def save_audio(self, audio: torch.Tensor, sample_rate: int, output_path: str) -> str:

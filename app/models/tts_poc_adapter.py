@@ -16,15 +16,16 @@ import torch
 from pathlib import Path
 from typing import Optional, Tuple, Dict, Any
 
+from app.core import config
+
 # Configure logging
 logger = logging.getLogger("echoforge.tts_poc_adapter")
 
-# Default paths
+# Default paths for the original TTS_POC project
 TTS_POC_PATH = "/home/tdeshane/tts_poc"
 MOVIE_MAKER_PATH = "/home/tdeshane/movie_maker"
 VOICE_POC_PATH = os.path.join(MOVIE_MAKER_PATH, "voice_poc")
 VOICE_GENERATOR_SCRIPT = os.path.join(VOICE_POC_PATH, "run_voice_generator.sh")
-SCENES_OUTPUT_DIR = os.path.join(MOVIE_MAKER_PATH, "hdmy5movie_voices", "scenes")
 
 class TTSPOCAdapter:
     """
@@ -42,8 +43,14 @@ class TTSPOCAdapter:
         self.output_dir = output_dir
         self.available = False
         
-        # Ensure output directory exists
+        # Create EchoForge-specific paths
+        self.echoforge_output_dir = os.path.join(output_dir, "generated")
+        self.temp_output_dir = os.path.join(output_dir, "temp")
+        
+        # Ensure output directories exist
         os.makedirs(self.output_dir, exist_ok=True)
+        os.makedirs(self.echoforge_output_dir, exist_ok=True)
+        os.makedirs(self.temp_output_dir, exist_ok=True)
         
         # Try to validate the adapter setup
         if os.path.exists(TTS_POC_PATH):
@@ -150,12 +157,12 @@ class TTSPOCAdapter:
                     device = "cpu"
                     logger.info("Auto-selecting CPU as CUDA is not available")
             
-            # Build the command
+            # Build the command - Use EchoForge temp directory for output
             cmd = [
                 VOICE_GENERATOR_SCRIPT,
                 "--scene", str(scene_id),
                 "--device", device,
-                "--output", SCENES_OUTPUT_DIR,
+                "--output", self.temp_output_dir,
                 "--prompts", prompts_file
             ]
             
@@ -191,6 +198,11 @@ class TTSPOCAdapter:
             
             logger.info(f"Voice generation command succeeded")
             
+            # Log the complete output to debug
+            logger.debug(f"STDOUT: {stdout}")
+            if stderr:
+                logger.debug(f"STDERR: {stderr}")
+            
             # Look for the output file
             output_path = None
             
@@ -207,20 +219,57 @@ class TTSPOCAdapter:
             
             # If we didn't find it in stdout, check various locations
             if not output_path or not os.path.exists(output_path):
-                # Try standard patterns
+                # Try standard patterns in our temp directory
                 potential_paths = [
-                    os.path.join(SCENES_OUTPUT_DIR, f"scene_{scene_id}.wav"),
-                    os.path.join(SCENES_OUTPUT_DIR, f"scene{scene_id}.wav"),
-                    os.path.join(SCENES_OUTPUT_DIR, f"{scene_id}.wav"),
+                    os.path.join(self.temp_output_dir, f"scene_{scene_id}.wav"),
+                    os.path.join(self.temp_output_dir, f"scene{scene_id}.wav"),
+                    os.path.join(self.temp_output_dir, f"{scene_id}.wav"),
                     os.path.join(VOICE_POC_PATH, f"output_{scene_id}.wav"),
                     os.path.join(VOICE_POC_PATH, f"scene_{scene_id}.wav")
                 ]
                 
+                # Also check the original movie_maker paths as fallback
+                movie_maker_paths = [
+                    os.path.join(MOVIE_MAKER_PATH, "hdmy5movie_voices", "scenes", f"scene_{scene_id}.wav"),
+                    os.path.join(MOVIE_MAKER_PATH, "hdmy5movie_voices", "scenes", f"scene{scene_id}.wav"),
+                    os.path.join(MOVIE_MAKER_PATH, "hdmy5movie_voices", "scenes", f"{scene_id}.wav")
+                ]
+                
+                # Combine both lists
+                potential_paths.extend(movie_maker_paths)
+                
+                # Check for newest .wav files in all potential directories
+                current_time = time.time()
+                directories_to_check = [
+                    self.temp_output_dir,
+                    VOICE_POC_PATH,
+                    os.path.join(MOVIE_MAKER_PATH, "hdmy5movie_voices", "scenes")
+                ]
+                
+                newest_file = None
+                newest_time = 0
+                
+                for directory in directories_to_check:
+                    if os.path.exists(directory):
+                        for filename in os.listdir(directory):
+                            if filename.endswith('.wav'):
+                                file_path = os.path.join(directory, filename)
+                                file_mtime = os.path.getmtime(file_path)
+                                if current_time - file_mtime < 60 and file_mtime > newest_time:
+                                    newest_time = file_mtime
+                                    newest_file = file_path
+                
+                # First check the exact patterns
                 for path in potential_paths:
                     if os.path.exists(path):
                         output_path = path
                         logger.debug(f"Found output using pattern matching: {output_path}")
                         break
+                
+                # If not found, use the newest file
+                if (not output_path or not os.path.exists(output_path)) and newest_file:
+                    output_path = newest_file
+                    logger.debug(f"Found newest wav file: {output_path}")
             
             if not output_path or not os.path.exists(output_path):
                 logger.error(f"Output file not found after exhaustive search")
@@ -237,7 +286,7 @@ class TTSPOCAdapter:
                 timestamp = int(time.time())
                 unique_id = str(scene_id)[-8:]  # Use last 8 digits of scene_id
                 output_filename = f"voice_{timestamp}_{unique_id}.wav"
-                final_output = os.path.join(self.output_dir, output_filename)
+                final_output = os.path.join(self.echoforge_output_dir, output_filename)
                 
                 # Save a copy to our output directory
                 torchaudio.save(final_output, audio, sample_rate)
@@ -288,7 +337,7 @@ class TTSPOCAdapter:
         timestamp = int(time.time())
         unique_id = os.urandom(4).hex()  # 8 character random hex
         output_filename = f"voice_{timestamp}_{unique_id}.wav"
-        final_output = os.path.join(self.output_dir, output_filename)
+        final_output = os.path.join(self.echoforge_output_dir, output_filename)
         
         try:
             # Create a temporary JSON file with the generation parameters
