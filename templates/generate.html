@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="{{ default_theme }}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -16,10 +16,13 @@
         <nav>
             <ul>
                 <li><a href="/">Home</a></li>
-                <li><a href="/generate" class="active">Generate Voice</a></li>
-                <li><a href="https://github.com/yourusername/echoforge" target="_blank">GitHub</a></li>
+                <li><a href="/characters">Characters</a></li>
+                <li><a href="/generate" class="active">Generate</a></li>
             </ul>
         </nav>
+        <button id="theme-toggle" aria-label="Toggle dark mode">
+            <span id="theme-toggle-icon">{{ '☀️' if default_theme == 'dark' else '🌙' }}</span>
+        </button>
     </header>
 
     <main>

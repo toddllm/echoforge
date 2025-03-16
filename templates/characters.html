@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="{{ default_theme }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EchoForge - Character Showcase</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='/css/styles.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', path='/css/characters.css') }}">
+    <script src="{{ url_for('static', path='/js/main.js') }}" defer></script>
+    <script src="{{ url_for('static', path='/js/characters.js') }}" defer></script>
+</head>
+<body>
+    <header>
+        <h1>EchoForge</h1>
+        <p>Character Voice Showcase</p>
+        <nav>
+            <ul>
+                <li><a href="/">Home</a></li>
+                <li><a href="/characters" class="active">Characters</a></li>
+                <li><a href="/generate">Generate</a></li>
+            </ul>
+        </nav>
+        <button id="theme-toggle" aria-label="Toggle dark mode">
+            <span id="theme-toggle-icon">{{ '☀️' if default_theme == 'dark' else '🌙' }}</span>
+        </button>
+    </header>
+    
+    <main>
+        <section class="filters">
+            <h2>Filter Voices</h2>
+            <div class="filter-controls">
+                <div class="filter-group">
+                    <label for="gender-filter">Gender:</label>
+                    <select id="gender-filter">
+                        <option value="all">All</option>
+                        <option value="male">Male</option>
+                        <option value="female">Female</option>
+                        <option value="neutral">Neutral</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label for="style-filter">Style:</label>
+                    <select id="style-filter">
+                        <option value="all">All</option>
+                        <option value="default">Default</option>
+                        <option value="cheerful">Cheerful</option>
+                        <option value="sad">Sad</option>
+                        <option value="angry">Angry</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label for="search-filter">Search:</label>
+                    <input type="text" id="search-filter" placeholder="Search by name...">
+                </div>
+            </div>
+        </section>
+
+        <section class="character-grid" id="character-grid">
+            <!-- Character cards will be dynamically inserted here -->
+            <div class="loading-indicator">Loading characters...</div>
+        </section>
+
+        <template id="character-card-template">
+            <div class="character-card" data-speaker-id="" data-gender="" data-style="">
+                <div class="character-avatar">
+                    <img src="" alt="Character avatar">
+                </div>
+                <div class="character-info">
+                    <h3 class="character-name"></h3>
+                    <p class="character-description"></p>
+                    <div class="character-meta">
+                        <span class="gender-badge"></span>
+                        <span class="style-badge"></span>
+                    </div>
+                </div>
+                <div class="character-actions">
+                    <button class="play-sample-btn" aria-label="Play sample">
+                        <span class="play-icon">▶️</span>
+                    </button>
+                    <button class="generate-btn">Generate</button>
+                </div>
+                <div class="audio-player">
+                    <audio controls></audio>
+                </div>
+            </div>
+        </template>
+    </main>
+
+    <div id="character-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal">&times;</span>
+            <div class="modal-header">
+                <h2 id="modal-character-name"></h2>
+            </div>
+            <div class="modal-body">
+                <div class="character-details">
+                    <div class="character-avatar-large">
+                        <img id="modal-character-avatar" src="" alt="Character avatar">
+                    </div>
+                    <div class="character-info-large">
+                        <p id="modal-character-description"></p>
+                        <div class="character-meta">
+                            <span id="modal-gender-badge" class="gender-badge"></span>
+                            <span id="modal-style-badge" class="style-badge"></span>
+                        </div>
+                    </div>
+                </div>
+                <div class="generation-form">
+                    <h3>Generate Voice</h3>
+                    <div class="form-group">
+                        <label for="modal-text">Text to convert:</label>
+                        <textarea id="modal-text" rows="4" required></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="modal-temperature">Temperature:</label>
+                        <input type="range" id="modal-temperature" min="0.1" max="1.0" step="0.1" value="0.7">
+                        <span id="modal-temperature-value">0.7</span>
+                    </div>
+                    <div class="form-group">
+                        <label for="modal-top-k">Top-K:</label>
+                        <input type="range" id="modal-top-k" min="10" max="100" step="10" value="80">
+                        <span id="modal-top-k-value">80</span>
+                    </div>
+                    <div class="form-group">
+                        <label for="modal-style">Style:</label>
+                        <select id="modal-style">
+                            <option value="default">Default</option>
+                            <option value="cheerful">Cheerful</option>
+                            <option value="sad">Sad</option>
+                            <option value="angry">Angry</option>
+                        </select>
+                    </div>
+                    <button id="modal-generate-btn" class="primary-btn">Generate Voice</button>
+                </div>
+                <div id="modal-result" class="generation-result">
+                    <h3>Generated Voice</h3>
+                    <div id="modal-task-status">Processing...</div>
+                    <div id="modal-audio-player" style="display: none;">
+                        <audio id="modal-voice-audio" controls></audio>
+                        <div class="audio-controls">
+                            <button id="modal-download-btn">Download</button>
+                            <button id="modal-copy-link-btn">Copy Link</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <footer>
+        <p>EchoForge &copy; 2025 - Character Voice Generator</p>
+    </footer>
+</body>
+</html> 

@@ -38,4 +38,17 @@ async def generate_page(request: Request):
             "request": request,
             "default_text": "Hello, this is a test of the voice generation system."
         }
+    )
+
+
+@router.get("/characters", response_class=HTMLResponse)
+async def characters_page(request: Request):
+    """Render the character showcase page."""
+    logger.info("Rendering character showcase page")
+    return templates.TemplateResponse(
+        "characters.html",
+        {
+            "request": request,
+            "default_theme": "light"
+        }
     ) 

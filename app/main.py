@@ -22,6 +22,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core import config
 from app.core.auth import auth_required
 from app.api.router import router as api_router
+from app.ui.routes import router as ui_router
 
 # Setup logging
 logging.basicConfig(
@@ -71,6 +72,9 @@ except Exception as e:
 
 # Include API routes
 app.include_router(api_router)
+
+# Include UI routes
+app.include_router(ui_router)
 
 # Try to mount voice files directory
 try:
