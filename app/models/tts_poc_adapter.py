@@ -107,6 +107,7 @@ class TTSPOCAdapter:
                                   top_k: int, device: str) -> Tuple[Optional[torch.Tensor], int]:
         """
         Generate speech using the voice_poc script from movie_maker.
+        This is a simplified version that uses a single prompt directly.
         
         Args:
             text: Text to convert to speech
@@ -118,119 +119,113 @@ class TTSPOCAdapter:
         Returns:
             Tuple containing the audio tensor and sample rate, or (None, 0) if failed
         """
-        logger.info(f"Generating speech with voice_poc script: '{text}'")
+        logger.info(f"Generating speech for text: '{text}'")
         
         # Create a unique identifier for this request
         timestamp = int(time.time())
         import random
         unique_id = f"{timestamp}_{random.randint(10000, 99999)}"
-        output_filename = f"echoforge_voice_{unique_id}.wav"
+        expected_output = os.path.join(self.temp_output_dir, f"echoforge_voice_{unique_id}.wav")
         
-        # Create our expected output path
-        expected_output_path = os.path.join(self.temp_output_dir, output_filename)
-        logger.info(f"Expected output will be at: {expected_output_path}")
-        
-        # Create a custom Python script for direct generation (no scenes)
+        # Use tempfile to create a temporary direct script that we control
         temp_script = None
-        prompts_file = None
         try:
-            # Create a temporary file for the direct generation script
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as script_file:
-                script_content = f"""
-# Temporary direct voice generation script for EchoForge
+            # Create a temporary Python script file
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+                script_content = f'''
 import os
 import sys
 import torch
 import logging
+import json
+import tempfile
+import subprocess
 
-# Configure logging
+# Set up logging
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("direct_voice_generator")
+logger = logging.getLogger("echoforge_direct_tts")
 
-# Add the voice_poc path to sys.path
-voice_poc_path = "{VOICE_POC_PATH}"
-sys.path.insert(0, voice_poc_path)
+# Define paths
+VOICE_GENERATOR = "{VOICE_GENERATOR_SCRIPT}"
+OUTPUT_DIR = "{self.temp_output_dir}"
+OUTPUT_FILE = "{expected_output}"
 
-# First try to import from voice_poc
+# Create a simple JSON file with our text
+temp_json = None
 try:
-    from csm.generator import Generator
-    logger.info("Successfully imported CSM modules from voice_poc")
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+        json.dump({{"1": "{text}"}}, f)
+        temp_json = f.name
     
-    # Initialize the generator
-    generator = Generator(device="{device}")
+    # Run the voice generator script with a single scene
+    cmd = [
+        VOICE_GENERATOR,
+        "--device", "{device}",
+        "--output", OUTPUT_DIR,
+        "--prompts", temp_json,
+        "--scene", "1"
+    ]
     
-    # Generate the audio for our single text prompt
-    logger.info("Generating speech for text: '{text}'")
+    logger.info(f"Running command: {{' '.join(cmd)}}")
     
-    # Generate and save audio to our specific output path
-    audio = generator.generate_audio_for_text(
-        "{text}", 
-        temperature={temperature}, 
-        top_k={top_k}
+    # Execute the command
+    process = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True
     )
     
-    # Ensure the output directory exists
-    os.makedirs(os.path.dirname("{expected_output_path}"), exist_ok=True)
+    # Wait for the process to complete
+    stdout, stderr = process.communicate()
     
-    # Save to our expected output path
-    generator.save_audio(audio, "{expected_output_path}")
-    logger.info(f"Saved audio to {expected_output_path}")
+    if process.returncode != 0:
+        logger.error(f"Command failed with code {{process.returncode}}")
+        logger.error(f"STDOUT: {{stdout}}")
+        logger.error(f"STDERR: {{stderr}}")
+        sys.exit(1)
     
-    # Also save to a backup location in case the original one isn't found
-    backup_path = os.path.join(os.getcwd(), "{output_filename}")
-    generator.save_audio(audio, backup_path)
-    logger.info(f"Saved backup to {backup_path}")
-    
-    print(f"ECHOFORGE_OUTPUT_PATH: {expected_output_path}")
-    sys.exit(0)
-except Exception as e:
-    logger.error(f"Error generating with CSM Generator: {{e}}")
-    print(f"ERROR: {{e}}")
-    sys.exit(1)
-"""
-                script_file.write(script_content)
-                temp_script = script_file.name
+    # Look for the output file - scenes are usually named scene_1.wav
+    scene_file = os.path.join(OUTPUT_DIR, "scene_1.wav")
+    if os.path.exists(scene_file):
+        # Copy to our expected output path
+        import shutil
+        shutil.copy2(scene_file, OUTPUT_FILE)
+        logger.info(f"Copied scene file to: {{OUTPUT_FILE}}")
+        print(f"OUTPUT_FILE: {{OUTPUT_FILE}}")
+        sys.exit(0)
+    else:
+        # Check for other possible filenames
+        import glob
+        possible_files = glob.glob(os.path.join(OUTPUT_DIR, "*.wav"))
+        for file in possible_files:
+            file_mtime = os.path.getmtime(file)
+            if abs(file_mtime - os.path.getmtime(temp_json)) < 60:  # Files created within a minute
+                shutil.copy2(file, OUTPUT_FILE)
+                logger.info(f"Copied alternate file {{file}} to: {{OUTPUT_FILE}}")
+                print(f"OUTPUT_FILE: {{OUTPUT_FILE}}")
+                sys.exit(0)
+        
+        logger.error("Could not find generated file")
+        sys.exit(1)
+finally:
+    # Clean up
+    if temp_json and os.path.exists(temp_json):
+        os.unlink(temp_json)
+'''
+                f.write(script_content)
+                temp_script = f.name
             
-            logger.debug(f"Created direct generation script: {temp_script}")
-            
-            # Determine device to use
-            if device == "auto":
-                # Check if CUDA is available
-                if torch.cuda.is_available():
-                    try:
-                        # Check available GPU memory
-                        device_id = torch.cuda.current_device()
-                        free_memory = torch.cuda.get_device_properties(device_id).total_memory - torch.cuda.memory_allocated(device_id)
-                        free_memory_mb = free_memory / (1024 * 1024)
-                        
-                        if free_memory_mb > 2000:  # Need at least 2GB
-                            device = "cuda"
-                            logger.info(f"Auto-selecting CUDA device with {free_memory_mb:.2f} MB free")
-                        else:
-                            device = "cpu"
-                            logger.info(f"Auto-selecting CPU due to limited GPU memory ({free_memory_mb:.2f} MB free)")
-                    except Exception as e:
-                        logger.warning(f"Error checking GPU memory: {e}, falling back to CPU")
-                        device = "cpu"
-                else:
-                    device = "cpu"
-                    logger.info("Auto-selecting CPU as CUDA is not available")
-            
-            # Build the command to run our direct script
-            cmd = [
-                sys.executable,  # Use the same Python interpreter
-                temp_script
-            ]
-            
-            logger.info(f"Running direct voice generation with device: {device}, command: {' '.join(cmd)}")
+            # Set up command to run our helper script
+            cmd = [sys.executable, temp_script]
+            logger.info(f"Running voice generation with command: {' '.join(cmd)}")
             
             # Run the command
             process = subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                text=True,
-                cwd=VOICE_POC_PATH
+                text=True
             )
             
             # Wait for the process to complete
@@ -238,283 +233,70 @@ except Exception as e:
             
             # Check the return code
             if process.returncode != 0:
-                logger.error(f"Direct voice generation failed with return code: {process.returncode}")
+                logger.error(f"Voice generation failed with return code: {process.returncode}")
                 logger.error(f"STDOUT: {stdout}")
                 logger.error(f"STDERR: {stderr}")
                 
-                # Check for typical errors
-                if "CUDA out of memory" in stderr:
-                    logger.warning("CUDA out of memory error detected")
-                    if device == "cuda":
-                        logger.info("CUDA failed, falling back to CPU")
-                        # Recursive call with CPU device
-                        return self._generate_with_voice_script(text, speaker_id, temperature, top_k, "cpu")
+                # Fall back to CPU if we got CUDA out of memory error
+                if device == "cuda" and "CUDA out of memory" in stderr:
+                    logger.warning("CUDA out of memory error detected, falling back to CPU")
+                    return self._generate_with_voice_script(text, speaker_id, temperature, top_k, "cpu")
                 
-                # If the direct approach fails, fall back to the original script
-                logger.warning("Direct generation failed, falling back to original voice generator script")
-                return self._generate_with_original_script(text, speaker_id, temperature, top_k, device)
+                return None, 0
             
-            logger.info(f"Direct voice generation command succeeded")
+            logger.info(f"Voice generation completed successfully")
             
-            # Log the complete output for debugging
-            logger.info(f"STDOUT: {stdout}")
-            if stderr:
-                logger.info(f"STDERR: {stderr}")
-            
-            # Wait a moment to ensure file system operations complete
-            time.sleep(2)
-            
-            # Look for the output file marker in stdout
+            # Look for the OUTPUT_FILE marker in stdout
             output_path = None
             for line in stdout.splitlines():
-                if "ECHOFORGE_OUTPUT_PATH:" in line:
-                    parts = line.split("ECHOFORGE_OUTPUT_PATH:", 1)
+                if "OUTPUT_FILE:" in line:
+                    parts = line.split("OUTPUT_FILE:", 1)
                     if len(parts) == 2:
                         potential_path = parts[1].strip()
                         if os.path.exists(potential_path):
                             output_path = potential_path
-                            logger.info(f"Found output path from marker: {output_path}")
+                            logger.info(f"Found output file from marker: {output_path}")
                             break
             
-            # If not found with marker, look for expected output path
-            if not output_path and os.path.exists(expected_output_path):
-                output_path = expected_output_path
-                logger.info(f"Found output at expected path: {output_path}")
+            # If we couldn't find the marker, check if the expected output exists
+            if not output_path and os.path.exists(expected_output):
+                output_path = expected_output
+                logger.info(f"Found expected output file: {output_path}")
             
-            # Search for recently modified files
+            # If still not found, look for any WAV files created in the last 30 seconds
             if not output_path:
-                # Check for the output filename in temp directory or current directory
-                for check_dir in [self.temp_output_dir, VOICE_POC_PATH, os.getcwd()]:
-                    potential_path = os.path.join(check_dir, output_filename)
-                    if os.path.exists(potential_path):
-                        output_path = potential_path
-                        logger.info(f"Found output file in directory {check_dir}: {output_path}")
-                        break
+                current_time = time.time()
+                newest_file = None
+                newest_time = 0
                 
-                # If still not found, look for any recent WAV file
-                if not output_path:
-                    current_time = time.time()
-                    newest_file = None
-                    newest_time = 0
-                    
-                    for directory in [self.temp_output_dir, VOICE_POC_PATH, os.getcwd()]:
-                        if os.path.exists(directory):
-                            logger.info(f"Checking directory for recent WAV files: {directory}")
-                            for filename in os.listdir(directory):
-                                if filename.endswith('.wav'):
-                                    file_path = os.path.join(directory, filename)
-                                    file_mtime = os.path.getmtime(file_path)
-                                    time_diff = current_time - file_mtime
-                                    logger.info(f"Found WAV file: {file_path}, modified {time_diff:.1f} seconds ago")
-                                    if time_diff < 30 and file_mtime > newest_time:  # Look for files modified in the last 30 seconds
-                                        newest_time = file_mtime
-                                        newest_file = file_path
-                    
-                    if newest_file:
-                        output_path = newest_file
-                        logger.info(f"Found newest wav file: {output_path}, modified {current_time - newest_time:.1f} seconds ago")
-            
-            # If output still not found, try desperate measures
-            if not output_path:
-                logger.warning(f"No output file found using standard methods. Trying filesystem search...")
+                for directory in [self.temp_output_dir, VOICE_POC_PATH]:
+                    if os.path.exists(directory):
+                        for filename in os.listdir(directory):
+                            if filename.endswith('.wav'):
+                                file_path = os.path.join(directory, filename)
+                                file_mtime = os.path.getmtime(file_path)
+                                time_diff = current_time - file_mtime
+                                if time_diff < 30 and file_mtime > newest_time:
+                                    newest_time = file_mtime
+                                    newest_file = file_path
                 
-                # Run the find command to locate recently modified wav files
-                find_cmd = [
-                    "find", 
-                    "/tmp", VOICE_POC_PATH, os.getcwd(),
-                    "-name", "*.wav",
-                    "-mmin", "-1",  # Modified in the last 1 minute
-                    "-type", "f"    # Regular files only
-                ]
-                
-                try:
-                    find_process = subprocess.Popen(
-                        find_cmd,
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.PIPE,
-                        text=True
-                    )
-                    
-                    find_stdout, find_stderr = find_process.communicate()
-                    
-                    if find_process.returncode == 0 and find_stdout:
-                        recent_wav_files = find_stdout.strip().split("\n")
-                        if recent_wav_files:
-                            most_recent = None
-                            most_recent_time = 0
-                            
-                            for file_path in recent_wav_files:
-                                if os.path.exists(file_path):
-                                    logger.info(f"Found recent WAV file: {file_path}")
-                                    file_mtime = os.path.getmtime(file_path)
-                                    if file_mtime > most_recent_time:
-                                        most_recent_time = file_mtime
-                                        most_recent = file_path
-                            
-                            if most_recent:
-                                output_path = most_recent
-                                logger.info(f"Using most recently modified WAV file: {output_path}")
-                    else:
-                        logger.warning(f"Find command failed or found no files: {find_stderr}")
-                
-                except Exception as e:
-                    logger.warning(f"Error running find command: {e}")
+                if newest_file:
+                    output_path = newest_file
+                    logger.info(f"Using newest WAV file: {output_path}, modified {current_time - newest_time:.1f} seconds ago")
             
             if not output_path or not os.path.exists(output_path):
-                logger.error(f"Output file not found after direct generation attempt")
-                logger.error(f"STDOUT content for reference: {stdout}")
-                
-                # Fall back to the original script as a last resort
-                logger.warning("Direct generation failed to produce a file, falling back to original voice generator script")
-                return self._generate_with_original_script(text, speaker_id, temperature, top_k, device)
-            
-            logger.info(f"Found generated speech at: {output_path}")
+                logger.error("Output file not found after generation")
+                return None, 0
             
             # Load the audio file
             try:
                 import torchaudio
                 audio, sample_rate = torchaudio.load(output_path)
                 
-                # Copy to our output directory with a unique name
-                timestamp = int(time.time())
-                final_output = os.path.join(self.echoforge_output_dir, f"voice_{timestamp}_{unique_id}.wav")
-                
-                # Save a copy to our output directory
+                # Save a copy to our output directory with a unique name
+                final_output = os.path.join(self.echoforge_output_dir, f"voice_{unique_id}.wav")
                 torchaudio.save(final_output, audio, sample_rate)
-                logger.info(f"Saved copy to: {final_output}")
-                
-                # Return the audio tensor and sample rate
-                return audio.squeeze(), sample_rate
-                
-            except Exception as e:
-                logger.error(f"Error loading audio file {output_path}: {e}")
-                return None, 0
-            
-        except Exception as e:
-            logger.exception(f"Error in direct speech generation: {e}")
-            return None, 0
-        
-        finally:
-            # Clean up temporary files
-            if temp_script and os.path.exists(temp_script):
-                try:
-                    os.unlink(temp_script)
-                except Exception as e:
-                    logger.warning(f"Error removing temporary script file: {e}")
-            
-            if prompts_file and os.path.exists(prompts_file):
-                try:
-                    os.unlink(prompts_file)
-                except Exception as e:
-                    logger.warning(f"Error removing temporary prompts file: {e}")
-    
-    def _generate_with_original_script(self, text: str, speaker_id: int, temperature: float, 
-                                     top_k: int, device: str) -> Tuple[Optional[torch.Tensor], int]:
-        """
-        Fallback method that uses the original voice_poc script.
-        This is kept as a fallback in case the direct method fails.
-        
-        Args:
-            text: Text to convert to speech
-            speaker_id: ID of the speaker to use
-            temperature: Temperature for generation
-            top_k: Top-k value for generation
-            device: Device to use (auto, cpu, cuda)
-            
-        Returns:
-            Tuple containing the audio tensor and sample rate, or (None, 0) if failed
-        """
-        logger.info(f"Falling back to original script for: '{text}'")
-        
-        # Create a unique identifier for this request
-        timestamp = int(time.time())
-        import random
-        unique_id = f"{timestamp}_{random.randint(10000, 99999)}"
-        
-        # Create a temporary prompts file with a single prompt (no scene ID)
-        prompts_file = None
-        try:
-            # Create a temporary file for the prompts with a direct prompt
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as temp:
-                # Just write the text directly - no JSON or scene IDs
-                temp.write(text)
-                prompts_file = temp.name
-            
-            logger.debug(f"Created direct prompts file: {prompts_file}")
-            
-            # Build the command - simplified with no scene ID
-            cmd = [
-                VOICE_GENERATOR_SCRIPT,
-                "--device", device,
-                "--output", self.temp_output_dir,
-                "--text", text,  # Pass text directly
-                "--direct"  # Add a flag to indicate direct text input
-            ]
-            
-            logger.info(f"Running original voice generation with direct text: {' '.join(cmd)}")
-            
-            # Run the command
-            process = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                cwd=VOICE_POC_PATH
-            )
-            
-            # Wait for the process to complete
-            stdout, stderr = process.communicate()
-            
-            # Check the return code
-            if process.returncode != 0:
-                logger.error(f"Original voice generation failed with return code: {process.returncode}")
-                logger.error(f"STDOUT: {stdout}")
-                logger.error(f"STDERR: {stderr}")
-                return None, 0
-            
-            logger.info(f"Original voice generation command succeeded")
-            
-            # Log the complete output for debugging
-            logger.info(f"STDOUT: {stdout}")
-            if stderr:
-                logger.info(f"STDERR: {stderr}")
-            
-            # Wait a moment to ensure file system operations complete
-            time.sleep(2)
-            
-            # Search for the output file - simplify the search to focus on recent files
-            current_time = time.time()
-            newest_file = None
-            newest_time = 0
-            
-            for directory in [self.temp_output_dir, VOICE_POC_PATH]:
-                if os.path.exists(directory):
-                    for filename in os.listdir(directory):
-                        if filename.endswith('.wav'):
-                            file_path = os.path.join(directory, filename)
-                            file_mtime = os.path.getmtime(file_path)
-                            time_diff = current_time - file_mtime
-                            if time_diff < 60 and file_mtime > newest_time:
-                                newest_time = file_mtime
-                                newest_file = file_path
-            
-            if not newest_file:
-                logger.error(f"No output file found after original script generation")
-                return None, 0
-            
-            logger.info(f"Found generated speech from original script at: {newest_file}")
-            
-            # Load the audio file
-            try:
-                import torchaudio
-                audio, sample_rate = torchaudio.load(newest_file)
-                
-                # Copy to our output directory with a unique name
-                final_output = os.path.join(self.echoforge_output_dir, f"voice_{timestamp}_{unique_id}.wav")
-                
-                # Save a copy to our output directory
-                torchaudio.save(final_output, audio, sample_rate)
-                logger.info(f"Saved copy to: {final_output}")
+                logger.info(f"Saved final output to: {final_output}")
                 
                 # Return the audio tensor and sample rate
                 return audio.squeeze(), sample_rate
@@ -524,16 +306,16 @@ except Exception as e:
                 return None, 0
             
         except Exception as e:
-            logger.exception(f"Error in original script generation: {e}")
+            logger.exception(f"Error generating speech: {e}")
             return None, 0
         
         finally:
-            # Clean up temporary prompts file
-            if prompts_file and os.path.exists(prompts_file):
+            # Clean up the temporary script
+            if temp_script and os.path.exists(temp_script):
                 try:
-                    os.unlink(prompts_file)
+                    os.unlink(temp_script)
                 except Exception as e:
-                    logger.warning(f"Error removing temporary prompts file: {e}")
+                    logger.warning(f"Error removing temporary script: {e}")
     
     def _generate_with_web_api(self, text: str, speaker_id: int, temperature: float, 
                              top_k: int, device: str) -> Tuple[Optional[torch.Tensor], int]:
