@@ -207,31 +207,47 @@ Returns the status of a voice generation task.
 
 ## Roadmap
 
-Here are our plans for future development of EchoForge:
+Here are our development milestones for EchoForge:
 
-### Short-term Goals (Next 1-3 months)
+### Milestone 1: Enhanced Voice Generation
 
 - [ ] Voice fine-tuning interface for creating custom character voices
 - [ ] Batch processing for generating multiple voice clips at once
 - [ ] Improved voice style controls (emotion, pace, emphasis)
-- [ ] User accounts and voice library management
 - [ ] Enhanced audio playback controls (speed, pitch adjustment)
+- [ ] Voice preset library with shareable configurations
 
-### Medium-term Goals (3-6 months)
+### Milestone 2: User Experience & Management
+
+- [ ] User accounts and voice library management
+- [ ] Project organization for managing multiple voice generation tasks
+- [ ] Improved UI with customizable workspace
+- [ ] Export options for various audio formats and quality settings
+- [ ] Usage analytics and generation history
+
+### Milestone 3: Advanced Voice Features
 
 - [ ] Voice cloning from sample audio
 - [ ] Multi-speaker conversation generation
+- [ ] Context-aware voice continuity between generations
+- [ ] Advanced audio post-processing options
+- [ ] Voice style transfer between characters
+
+### Milestone 4: Ecosystem Integration
+
 - [ ] Integration with popular content creation tools
 - [ ] Mobile application for on-the-go voice generation
-- [ ] Advanced audio post-processing options
+- [ ] API marketplace for voice models and styles
+- [ ] Plugin system for extending functionality
+- [ ] Integration with virtual production pipelines
 
-### Long-term Vision
+### Future Vision
 
 - [ ] Real-time voice generation for interactive applications
 - [ ] Multi-language support with accent preservation
-- [ ] Voice style transfer between characters
-- [ ] API marketplace for voice models and styles
-- [ ] Integration with virtual production pipelines
+- [ ] Collaborative voice project editing
+- [ ] Voice-driven character animation
+- [ ] Emotional response modeling for dynamic conversations
 
 ## Contributing
 
