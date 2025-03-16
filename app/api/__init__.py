@@ -1,7 +1,5 @@
 """
-EchoForge - API Package
+API package for EchoForge.
 
-This package contains the API endpoints for the EchoForge application,
-enabling programmatic access to voice creation and management functionality.
-"""
-
+This package contains the API routes and handlers for the EchoForge application.
+""" 

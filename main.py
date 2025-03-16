@@ -1,93 +1,129 @@
-#!/usr/bin/env python3
 """
-EchoForge - AI-Powered Character Voice Creation
-Main application entry point
+EchoForge - Main Application
+
+This is the main entry point for the EchoForge application.
+It sets up the FastAPI server and registers all routes.
 """
 
 import os
-import sys
 import logging
+import argparse
 from pathlib import Path
-from dotenv import load_dotenv
 
-# Load environment variables from .env file
-load_dotenv()
+import uvicorn
+from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
 
-# Add the project directory to the path
-BASE_DIR = Path(__file__).resolve().parent
-sys.path.append(str(BASE_DIR))
+from app.api.routes import router as api_router
+from app.ui.routes import router as ui_router
+from app.core.voice_generator import VoiceGenerator
 
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[
-        logging.StreamHandler(sys.stdout),
-        logging.FileHandler(os.path.join(BASE_DIR, "echoforge.log")),
-    ],
+    format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
+    handlers=[logging.StreamHandler()]
 )
 logger = logging.getLogger("echoforge")
 
-def create_app():
-    """Create and configure the Flask application."""
-    from flask import Flask
-    from flask_cors import CORS
-    
-    # Import routes after app initialization to avoid circular imports
-    from app.api.routes import register_api_routes
-    from app.ui.routes import register_ui_routes
-    
-    app = Flask(
-        __name__,
-        static_folder=os.path.join(BASE_DIR, "static"),
-        template_folder=os.path.join(BASE_DIR, "templates"),
-    )
-    
-    # Load configuration
-    app.config.from_mapping(
-        SECRET_KEY=os.getenv("SECRET_KEY", "dev-key-for-development-only"),
-        DATA_DIR=os.path.join(BASE_DIR, "data"),
-        VOICE_DIR=os.path.join(BASE_DIR, "data", "voices"),
-        CHARACTER_DIR=os.path.join(BASE_DIR, "data", "characters"),
-        OUTPUT_DIR=os.path.join(BASE_DIR, "data", "output"),
-        MAX_CONTENT_LENGTH=16 * 1024 * 1024,  # 16 MB max upload size
-        ALLOWED_EXTENSIONS={"wav", "mp3", "json"},
-    )
-    
-    # Enable CORS
-    CORS(app)
-    
-    # Ensure required directories exist
-    for directory in [
-        app.config["DATA_DIR"],
-        app.config["VOICE_DIR"],
-        app.config["CHARACTER_DIR"],
-        app.config["OUTPUT_DIR"],
-    ]:
-        os.makedirs(directory, exist_ok=True)
-    
-    # Register blueprints
-    register_api_routes(app)
-    register_ui_routes(app)
-    
-    return app
+# Create FastAPI application
+app = FastAPI(
+    title="EchoForge",
+    description="Character Voice Generation Platform",
+    version="0.1.0"
+)
 
-def main():
-    """Run the application."""
-    app = create_app()
+# Enable CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # In production, you'd want to restrict this
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Mount static files
+app.mount(
+    "/static",
+    StaticFiles(directory=Path(__file__).parent / "static"),
+    name="static"
+)
+
+# Include routers
+app.include_router(api_router)
+app.include_router(ui_router)
+
+
+@app.on_event("startup")
+async def startup_event():
+    """Perform startup initialization."""
+    logger.info("Starting EchoForge application")
     
-    # Get port from environment or use default
-    port = int(os.getenv("PORT", 8000))
+    # Create data directories
+    data_dir = Path(__file__).parent / "data"
+    voices_dir = data_dir / "voices" / "output"
+    voices_dir.mkdir(parents=True, exist_ok=True)
     
-    # Run the app
-    app.run(
-        host="0.0.0.0",
-        port=port,
-        debug=os.getenv("FLASK_ENV") == "development",
+    logger.info(f"Initialized data directories: {data_dir}")
+
+
+def parse_args():
+    """Parse command line arguments."""
+    parser = argparse.ArgumentParser(description="EchoForge TTS Server")
+    parser.add_argument(
+        "--host", 
+        type=str, 
+        default="0.0.0.0", 
+        help="Host to bind the server to"
     )
-    
-    logger.info(f"EchoForge server started on port {port}")
+    parser.add_argument(
+        "--port", 
+        type=int, 
+        default=8000, 
+        help="Port to bind the server to"
+    )
+    parser.add_argument(
+        "--model-path", 
+        type=str, 
+        default=None, 
+        help="Path to the TTS model"
+    )
+    parser.add_argument(
+        "--device", 
+        type=str, 
+        default="auto", 
+        help="Device to use for TTS (auto, cuda, cpu)"
+    )
+    parser.add_argument(
+        "--debug", 
+        action="store_true", 
+        help="Enable debug mode"
+    )
+    return parser.parse_args()
+
 
 if __name__ == "__main__":
-    main()
+    # Parse command line arguments
+    args = parse_args()
+    
+    # Set environment variables for model settings
+    if args.model_path:
+        os.environ["ECHOFORGE_MODEL_PATH"] = args.model_path
+    os.environ["ECHOFORGE_DEVICE"] = args.device
+    
+    # Configure logging level based on debug mode
+    if args.debug:
+        logging.getLogger().setLevel(logging.DEBUG)
+        logger.debug("Debug mode enabled")
+    
+    # Start the server
+    logger.info(f"Starting server on {args.host}:{args.port}")
+    uvicorn.run(
+        "main:app",
+        host=args.host,
+        port=args.port,
+        reload=args.debug,
+        log_level="debug" if args.debug else "info"
+    )
 

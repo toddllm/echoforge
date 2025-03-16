@@ -1,15 +1,7 @@
 """
-EchoForge - App Package
+EchoForge - Character Voice Generation Application
 
-This package contains the core components of the EchoForge application:
-
-- core: Core functionality for voice synthesis and character management
-- api: API endpoints for programmatic access
-- models: Data models for the application
-- ui: User interface components and routes
-- utils: Utility functions and helpers
-- data: Data handling and storage
+This package contains the main application code for EchoForge.
 """
 
-__version__ = "0.1.0"
-
+__version__ = "0.1.0" 

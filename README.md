@@ -1,186 +1,200 @@
-# EchoForge: AI-Powered Character Voice Creation
+# EchoForge
 
-EchoForge is a comprehensive platform for creating, managing and using AI-generated character voices. The system enables users to create unique voice profiles with customizable characteristics, generate speech from text, and manage a library of character voices for various applications.
-
-![EchoForge](https://via.placeholder.com/800x400?text=EchoForge+Character+Voice+Generation)
+EchoForge is a web application for generating character voices using deep learning models. It provides a simple interface for converting text to speech with various voice options.
 
 ## Features
 
-- **Character Creation**: Create unique character profiles with names, backstories, and voice characteristics.
-- **Voice Management**: Organize and categorize voice profiles by gender, style, emotion, and other attributes.
-- **Text-to-Speech Generation**: Convert text to speech using selected character voices.
-- **API Access**: Use character voices programmatically via a REST API.
-- **User-Friendly Interface**: Simple web interface for creating and testing voices.
-- **Voice Library**: Browse and search through existing character voices.
+- Text-to-speech generation with multiple character voices
+- Adjustable generation parameters (temperature, top-k, style)
+- Background task processing for long-running generations
+- RESTful API for integration with other applications
+- Web interface with light and dark mode support
+- Easy environment configuration
 
-## Technical Stack
-
-- **Backend**: Python, FastAPI, PyTorch
-- **Frontend**: HTML5, CSS3, JavaScript
-- **TTS Core**: Custom TTS models based on state-of-the-art architectures
-- **Storage**: PostgreSQL, Redis
-- **API**: RESTful API with JSON payloads
-- **Containerization**: Docker, Docker Compose
-- **CI/CD**: GitHub Actions
-
-## Getting Started
+## Installation
 
 ### Prerequisites
 
-- Python 3.10+
-- Docker and Docker Compose (for containerized deployment)
-- PyTorch 2.0+ (for local development)
-- CUDA-compatible GPU (optional but recommended)
+- Python 3.8 or higher
+- [uv](https://github.com/astral-sh/uv) (recommended) or pip
 
-### Installation
+### Using uv (Recommended)
 
-#### Using Docker (Recommended)
+EchoForge uses [uv](https://github.com/astral-sh/uv) for fast, reliable Python package management. To set up the environment with uv:
 
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/yourusername/echoforge.git
-   cd echoforge
-   ```
+```bash
+# Clone the repository
+git clone https://github.com/yourusername/echoforge.git
+cd echoforge
 
-2. Start the application using Docker Compose:
-   ```bash
-   docker-compose up -d
-   ```
+# Run the setup script
+chmod +x setup_env.sh
+./setup_env.sh
+```
 
-3. Open your browser and navigate to:
-   ```
-   http://localhost:8000
-   ```
+The setup script will:
+1. Install uv if it's not already installed
+2. Create a virtual environment
+3. Install dependencies using `uv sync` (faster than pip)
+4. Create a default `.env.local` file for local configuration
 
-#### Local Development
+### Using pip
 
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/yourusername/echoforge.git
-   cd echoforge
-   ```
+If you prefer to use pip:
 
-2. Install development dependencies:
-   ```bash
-   pip install -r requirements-dev.txt
-   ```
+```bash
+# Clone the repository
+git clone https://github.com/yourusername/echoforge.git
+cd echoforge
 
-3. Run the application:
-   ```bash
-   python main.py
-   ```
+# Create a virtual environment
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 
-4. Open your browser and navigate to:
-   ```
-   http://localhost:8000
-   ```
+# Install dependencies
+pip install -r requirements.txt
+```
+
+## Configuration
+
+EchoForge can be configured using environment variables or `.env` files:
+
+- `.env` - Base environment configuration
+- `.env.local` - Local overrides (not committed to version control)
+
+### Environment Variables
+
+Key environment variables:
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `ALLOW_PUBLIC_SERVING` | Allow serving on all network interfaces | `false` |
+| `PUBLIC_HOST` | Host to bind when public serving is enabled | `0.0.0.0` |
+| `PORT` | Port to run the server on | `8765` |
+| `DEFAULT_THEME` | Default UI theme (light or dark) | `light` |
+| `ENABLE_AUTH` | Enable HTTP Basic authentication | `false` |
+| `AUTH_USERNAME` | Username for authentication | `echoforge` |
+| `AUTH_PASSWORD` | Password for authentication | `changeme123` |
+| `MODEL_PATH` | Path to the model checkpoint | `/path/to/model/checkpoint` |
+| `OUTPUT_DIR` | Directory to store generated voice files | `/tmp/echoforge/voices` |
+
+### Local Configuration
+
+For your local environment, you can create a `.env.local` file with your specific settings:
+
+```
+# Server settings
+ALLOW_PUBLIC_SERVING=true
+PUBLIC_HOST=0.0.0.0
+
+# Theme settings
+DEFAULT_THEME=dark
+
+# Authentication settings
+ENABLE_AUTH=true
+AUTH_USERNAME=your_username
+AUTH_PASSWORD=your_secure_password
+```
+
+## Running the Application
+
+### Development Mode
+
+```bash
+# Activate the virtual environment (if not already activated)
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+
+# Run the server
+./run_server.sh
+```
+
+The server will start on the configured host and port (default: http://127.0.0.1:8765).
+
+### Docker
+
+To run EchoForge in Docker:
+
+```bash
+# Build the Docker image
+docker build -t echoforge .
+
+# Run the container
+docker run -p 8765:8765 echoforge
+```
+
+## API Documentation
+
+EchoForge provides a RESTful API for voice generation:
+
+### Endpoints
+
+#### Health Check
+
+```
+GET /api/health
+```
+
+Returns the status and version of the API.
+
+#### List Available Voices
+
+```
+GET /api/voices
+```
+
+Returns a list of available voice options.
+
+#### Generate Voice
+
+```
+POST /api/generate
+```
+
+Request body:
+```json
+{
+  "text": "Text to convert to speech",
+  "speaker_id": 1,
+  "temperature": 0.5,
+  "top_k": 80,
+  "style": "default"
+}
+```
+
+Returns a task ID for tracking the generation process.
+
+#### Get Task Status
+
+```
+GET /api/tasks/{task_id}
+```
+
+Returns the status of a voice generation task.
 
 ## Development
 
+### Running Tests
+
+```bash
+# Run all tests
+./run_tests.sh
+```
+
 ### Project Structure
 
-```
-echoforge/
-├── app/                 # Application code
-│   ├── api/             # API endpoints
-│   ├── core/            # Core business logic
-│   ├── data/            # Data access layer
-│   ├── ui/              # UI routes
-│   └── utils/           # Utility functions
-├── tests/               # Test suite
-├── docker/              # Docker configuration
-├── static/              # Static assets
-└── templates/           # HTML templates
-```
-
-### Development Workflow
-
-We use the following tools to ensure code quality:
-
-- **Black**: Code formatting
-- **isort**: Import sorting
-- **Flake8**: Linting
-- **mypy**: Type checking
-- **pytest**: Testing
-
-Run the linting and formatting checks with:
-
-```bash
-make lint
-```
-
-Automatically format the code with:
-
-```bash
-make format
-```
-
-Run tests with:
-
-```bash
-make test
-```
-
-### Using Make
-
-The project includes a Makefile with common development tasks:
-
-- `make setup`: Install development dependencies
-- `make test`: Run the test suite
-- `make lint`: Run code quality checks
-- `make format`: Format code automatically
-- `make build`: Build Docker containers
-- `make run`: Run the application with Docker Compose
-- `make clean`: Clean up temporary files and containers
-
-## Contributing
-
-We welcome contributions to EchoForge! Please follow these steps to contribute:
-
-1. **Fork the repository**
-
-2. **Create a feature branch**:
-   ```bash
-   git checkout -b feature/your-feature-name
-   ```
-
-3. **Make your changes**:
-   - Follow the code style conventions
-   - Add tests for new features
-   - Update documentation as needed
-
-4. **Run the tests and linting**:
-   ```bash
-   make lint
-   make test
-   ```
-
-5. **Commit your changes**:
-   ```bash
-   git commit -m "Add your meaningful commit message"
-   ```
-
-6. **Push to your fork**:
-   ```bash
-   git push origin feature/your-feature-name
-   ```
-
-7. **Submit a pull request**
-
-### Pull Request Guidelines
-
-- Keep PRs focused on a single topic
-- Include tests for new functionality
-- Update documentation as necessary
-- Ensure CI passes on your PR
-- Reference any relevant issues in your PR description
+- `app/` - Application code
+  - `api/` - API endpoints and voice generation
+  - `core/` - Core functionality and configuration
+- `static/` - Static assets (CSS, JavaScript, images)
+- `templates/` - HTML templates
+- `tests/` - Test suite
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+[MIT License](LICENSE)
 
-## Acknowledgments
+## Acknowledgements
 
-- Built using state-of-the-art TTS models and techniques
-- Inspired by the need for more accessible character voice creation tools
+- This project uses the CSM model architecture for voice generation
+- Special thanks to the open-source community for their contributions to speech synthesis technology
 

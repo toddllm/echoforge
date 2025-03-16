@@ -1,294 +1,205 @@
 /**
  * EchoForge - Main JavaScript
- * This file contains client-side functionality for the EchoForge application.
+ * 
+ * This file handles the front-end interactions for the EchoForge application,
+ * including voice listing, generation, playback, and theme switching.
  */
 
-// Wait for the DOM to be fully loaded
-document.addEventListener('DOMContentLoaded', function() {
-    console.log('EchoForge application initialized');
-    
-    // Initialize components
-    initializeAudioPlayers();
-    initializeGenerationForm();
-    
-    // Enable tooltips if any exist
-    const tooltips = document.querySelectorAll('[data-tooltip]');
-    tooltips.forEach(initializeTooltip);
-});
+document.addEventListener('DOMContentLoaded', () => {
+    // DOM Elements
+    const voiceForm = document.getElementById('voice-form');
+    const generateBtn = document.getElementById('generate-btn');
+    const temperatureSlider = document.getElementById('temperature');
+    const temperatureValue = document.getElementById('temperature-value');
+    const topKSlider = document.getElementById('top_k');
+    const topKValue = document.getElementById('top_k-value');
+    const resultsSection = document.getElementById('results-section');
+    const taskStatus = document.getElementById('task-status');
+    const audioPlayer = document.getElementById('audio-player');
+    const voiceAudio = document.getElementById('voice-audio');
+    const downloadBtn = document.getElementById('download-btn');
+    const copyLinkBtn = document.getElementById('copy-link-btn');
+    const themeToggle = document.getElementById('theme-toggle');
+    const themeToggleIcon = document.getElementById('theme-toggle-icon');
 
-/**
- * Initialize audio players with custom controls
- */
-function initializeAudioPlayers() {
-    const audioPlayers = document.querySelectorAll('.audio-player');
-    
-    audioPlayers.forEach(player => {
-        const audio = player.querySelector('audio');
-        const playButton = player.querySelector('.play-button');
-        const progressBar = player.querySelector('.progress-bar');
-        const progressIndicator = player.querySelector('.progress-indicator');
+    // Variables
+    let currentTaskId = null;
+    let statusCheckInterval = null;
+
+    // Event Listeners
+    voiceForm.addEventListener('submit', handleFormSubmit);
+    temperatureSlider.addEventListener('input', updateTemperatureValue);
+    topKSlider.addEventListener('input', updateTopKValue);
+    downloadBtn.addEventListener('click', downloadAudio);
+    copyLinkBtn.addEventListener('click', copyAudioLink);
+    themeToggle.addEventListener('click', toggleTheme);
+
+    // Initialize theme from localStorage
+    initTheme();
+
+    // Theme functions
+    function initTheme() {
+        const savedTheme = localStorage.getItem('theme') || 'light';
+        document.documentElement.setAttribute('data-theme', savedTheme);
+        updateThemeIcon(savedTheme);
+    }
+
+    function toggleTheme() {
+        const currentTheme = document.documentElement.getAttribute('data-theme');
+        const newTheme = currentTheme === 'light' ? 'dark' : 'light';
         
-        if (!audio || !playButton) return;
+        document.documentElement.setAttribute('data-theme', newTheme);
+        localStorage.setItem('theme', newTheme);
+        updateThemeIcon(newTheme);
+    }
+
+    function updateThemeIcon(theme) {
+        themeToggleIcon.textContent = theme === 'light' ? '🌙' : '☀️';
+    }
+
+    // Update slider values
+    function updateTemperatureValue() {
+        temperatureValue.textContent = temperatureSlider.value;
+    }
+
+    function updateTopKValue() {
+        topKValue.textContent = topKSlider.value;
+    }
+
+    // Handle form submission
+    async function handleFormSubmit(event) {
+        event.preventDefault();
         
-        // Play/pause functionality
-        playButton.addEventListener('click', function() {
-            if (audio.paused) {
-                audio.play();
-                playButton.classList.add('playing');
-                playButton.innerHTML = '<span class="pause-icon">⏸</span>';
-            } else {
-                audio.pause();
-                playButton.classList.remove('playing');
-                playButton.innerHTML = '<span class="play-icon">▶</span>';
-            }
-        });
+        // Disable the generate button
+        generateBtn.disabled = true;
+        generateBtn.textContent = 'Generating...';
         
-        // Update progress bar
-        if (progressBar && progressIndicator) {
-            audio.addEventListener('timeupdate', function() {
-                const progress = (audio.currentTime / audio.duration) * 100;
-                progressIndicator.style.width = `${progress}%`;
+        // Show results section with processing status
+        resultsSection.style.display = 'block';
+        taskStatus.textContent = 'Processing your request...';
+        audioPlayer.style.display = 'none';
+        
+        // Get form data
+        const formData = new FormData(voiceForm);
+        const data = {
+            text: formData.get('text'),
+            speaker_id: parseInt(formData.get('speaker_id')),
+            temperature: parseFloat(formData.get('temperature')),
+            top_k: parseInt(formData.get('top_k')),
+            style: formData.get('style')
+        };
+        
+        try {
+            // Send request to generate voice
+            const response = await fetch('/api/generate', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(data)
             });
             
-            // Allow seeking
-            progressBar.addEventListener('click', function(e) {
-                const rect = progressBar.getBoundingClientRect();
-                const pos = (e.clientX - rect.left) / rect.width;
-                audio.currentTime = pos * audio.duration;
-            });
-        }
-        
-        // Reset play button when audio ends
-        audio.addEventListener('ended', function() {
-            playButton.classList.remove('playing');
-            playButton.innerHTML = '<span class="play-icon">▶</span>';
-        });
-    });
-}
-
-/**
- * Initialize the speech generation form
- */
-function initializeGenerationForm() {
-    const generationForm = document.getElementById('generation-form');
-    if (!generationForm) return;
-    
-    generationForm.addEventListener('submit', function(e) {
-        e.preventDefault();
-        
-        const text = document.getElementById('text-input').value.trim();
-        const voice = document.getElementById('voice-select').value;
-        const device = document.getElementById('device-select').value;
-        
-        if (!text) {
-            showMessage('Please enter some text to generate.', 'error');
-            return;
-        }
-        
-        if (!voice) {
-            showMessage('Please select a voice.', 'error');
-            return;
-        }
-        
-        // Show loading state
-        showMessage('Generating speech...', 'info');
-        setLoading(true);
-        
-        // Make API request
-        fetch('/api/generate', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                text: text,
-                voice: voice,
-                device: device
-            })
-        })
-        .then(response => {
             if (!response.ok) {
-                throw new Error('Network response was not ok');
+                throw new Error(`Server responded with status: ${response.status}`);
             }
-            return response.json();
-        })
-        .then(data => {
-            if (data.task_id) {
-                checkTaskStatus(data.task_id);
-            } else {
-                throw new Error('No task ID received');
-            }
-        })
-        .catch(error => {
-            console.error('Error generating speech:', error);
-            showMessage(`Error: ${error.message}`, 'error');
-            setLoading(false);
-        });
-    });
-}
-
-/**
- * Check the status of a generation task
- */
-function checkTaskStatus(taskId) {
-    if (!taskId) return;
+            
+            const result = await response.json();
+            currentTaskId = result.task_id;
+            
+            // Start checking task status
+            statusCheckInterval = setInterval(checkTaskStatus, 1000);
+            
+        } catch (error) {
+            console.error('Error generating voice:', error);
+            taskStatus.textContent = `Error: ${error.message}`;
+            resetGenerateButton();
+        }
+    }
     
-    const statusCheck = setInterval(() => {
-        fetch(`/api/status/${taskId}`)
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error('Network response was not ok');
-                }
-                return response.json();
-            })
-            .then(data => {
-                updateProgress(data.progress);
+    // Check task status
+    async function checkTaskStatus() {
+        try {
+            const response = await fetch(`/api/tasks/${currentTaskId}`);
+            
+            if (!response.ok) {
+                throw new Error(`Server responded with status: ${response.status}`);
+            }
+            
+            const taskData = await response.json();
+            
+            // Update status message
+            taskStatus.textContent = `Status: ${taskData.status}`;
+            
+            // Check if task is complete
+            if (taskData.status === 'completed') {
+                clearInterval(statusCheckInterval);
                 
-                if (data.status === 'complete') {
-                    clearInterval(statusCheck);
-                    showMessage('Speech generation complete!', 'success');
-                    setLoading(false);
+                // Set audio source
+                const fileUrl = taskData.file_url || taskData.result?.file_url;
+                if (fileUrl) {
+                    voiceAudio.src = fileUrl;
+                    audioPlayer.style.display = 'block';
                     
-                    if (data.output) {
-                        displayGeneratedAudio(data.output);
-                    }
-                } else if (data.status === 'error') {
-                    clearInterval(statusCheck);
-                    showMessage(`Error: ${data.error}`, 'error');
-                    setLoading(false);
+                    // Set download and copy link data
+                    downloadBtn.dataset.url = fileUrl;
+                    copyLinkBtn.dataset.url = window.location.origin + fileUrl;
+                    
+                    taskStatus.textContent = 'Voice generation complete!';
+                } else {
+                    taskStatus.textContent = 'Voice generated but no file URL was returned.';
                 }
-            })
-            .catch(error => {
-                console.error('Error checking task status:', error);
-                // Don't clear interval on network errors, let it retry
-            });
-    }, 1000);
-}
-
-/**
- * Display generated audio
- */
-function displayGeneratedAudio(audioPath) {
-    const resultContainer = document.getElementById('result-container');
-    if (!resultContainer) return;
-    
-    resultContainer.innerHTML = `
-        <div class="panel">
-            <h3 class="panel-title">Generated Speech</h3>
-            <div class="audio-player">
-                <audio src="/${audioPath}" preload="metadata"></audio>
-                <div class="player-controls">
-                    <button class="play-button"><span class="play-icon">▶</span></button>
-                    <div class="progress-bar">
-                        <div class="progress-indicator"></div>
-                    </div>
-                </div>
-                <div class="player-info">
-                    <a href="/${audioPath}" download class="download-link">Download Audio</a>
-                </div>
-            </div>
-        </div>
-    `;
-    
-    // Initialize the new audio player
-    initializeAudioPlayers();
-    
-    // Show the result container
-    resultContainer.style.display = 'block';
-    
-    // Scroll to result
-    resultContainer.scrollIntoView({ behavior: 'smooth' });
-}
-
-/**
- * Update progress indicator
- */
-function updateProgress(progress) {
-    const progressBar = document.getElementById('generation-progress');
-    if (progressBar) {
-        progressBar.style.width = `${progress}%`;
-    }
-}
-
-/**
- * Show a message to the user
- */
-function showMessage(message, type = 'info') {
-    const messageContainer = document.getElementById('message-container');
-    if (!messageContainer) return;
-    
-    // Clear existing messages
-    messageContainer.innerHTML = '';
-    
-    // Create message element
-    const messageElement = document.createElement('div');
-    messageElement.className = `message ${type}-message`;
-    messageElement.textContent = message;
-    
-    // Add dismiss button
-    const dismissButton = document.createElement('button');
-    dismissButton.className = 'dismiss-button';
-    dismissButton.innerHTML = '&times;';
-    dismissButton.addEventListener('click', () => {
-        messageElement.remove();
-    });
-    
-    messageElement.appendChild(dismissButton);
-    messageContainer.appendChild(messageElement);
-    
-    // Auto-dismiss success messages after 5 seconds
-    if (type === 'success') {
-        setTimeout(() => {
-            messageElement.remove();
-        }, 5000);
-    }
-}
-
-/**
- * Set loading state
- */
-function setLoading(isLoading) {
-    const generateButton = document.querySelector('#generation-form button[type="submit"]');
-    const progressContainer = document.getElementById('progress-container');
-    
-    if (generateButton) {
-        generateButton.disabled = isLoading;
-        generateButton.textContent = isLoading ? 'Generating...' : 'Generate Speech';
-    }
-    
-    if (progressContainer) {
-        progressContainer.style.display = isLoading ? 'block' : 'none';
-    }
-}
-
-/**
- * Initialize a tooltip
- */
-function initializeTooltip(element) {
-    const tooltipText = element.getAttribute('data-tooltip');
-    if (!tooltipText) return;
-    
-    // Create tooltip element
-    const tooltip = document.createElement('div');
-    tooltip.className = 'tooltip';
-    tooltip.textContent = tooltipText;
-    
-    // Position tooltip on hover
-    element.addEventListener('mouseenter', () => {
-        document.body.appendChild(tooltip);
-        
-        const rect = element.getBoundingClientRect();
-        tooltip.style.top = `${rect.top - tooltip.offsetHeight - 10}px`;
-        tooltip.style.left = `${rect.left + (rect.width / 2) - (tooltip.offsetWidth / 2)}px`;
-        tooltip.style.opacity = '1';
-    });
-    
-    element.addEventListener('mouseleave', () => {
-        tooltip.style.opacity = '0';
-        setTimeout(() => {
-            if (tooltip.parentNode) {
-                tooltip.parentNode.removeChild(tooltip);
+                
+                resetGenerateButton();
+                
+            } else if (taskData.status === 'failed') {
+                clearInterval(statusCheckInterval);
+                taskStatus.textContent = `Generation failed: ${taskData.error || 'Unknown error'}`;
+                resetGenerateButton();
             }
-        }, 300);
-    });
-} 
+            
+        } catch (error) {
+            console.error('Error checking task status:', error);
+            taskStatus.textContent = `Error checking status: ${error.message}`;
+            clearInterval(statusCheckInterval);
+            resetGenerateButton();
+        }
+    }
+    
+    // Reset generate button
+    function resetGenerateButton() {
+        generateBtn.disabled = false;
+        generateBtn.textContent = 'Generate Voice';
+    }
+    
+    // Download audio
+    function downloadAudio() {
+        const url = downloadBtn.dataset.url;
+        if (url) {
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = 'echoforge_voice.wav';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+    }
+    
+    // Copy audio link
+    function copyAudioLink() {
+        const url = copyLinkBtn.dataset.url;
+        if (url) {
+            navigator.clipboard.writeText(url)
+                .then(() => {
+                    const originalText = copyLinkBtn.textContent;
+                    copyLinkBtn.textContent = 'Copied!';
+                    setTimeout(() => {
+                        copyLinkBtn.textContent = originalText;
+                    }, 2000);
+                })
+                .catch(err => {
+                    console.error('Failed to copy link:', err);
+                    alert('Failed to copy link to clipboard.');
+                });
+        }
+    }
+}); 

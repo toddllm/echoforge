@@ -1,7 +1,6 @@
 """
-EchoForge - Core Package
+Core package for EchoForge.
 
 This package contains the core functionality for the EchoForge application,
-including voice synthesis, character creation, and model management.
-"""
-
+including voice generation and task management.
+""" 

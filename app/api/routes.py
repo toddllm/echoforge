@@ -1,337 +1,223 @@
 """
-EchoForge - API Routes
+API routes for the EchoForge application.
 
-This module defines the API routes for the EchoForge application.
+This module defines the API endpoints for voice generation and status checking.
 """
 
-import logging
 import os
+import logging
 import time
-from concurrent.futures import ThreadPoolExecutor
-from threading import Lock
-from typing import Dict, Any
+from typing import Dict, Any, List, Optional
+import uuid
+from pathlib import Path
 
-from flask import Blueprint, jsonify, request, current_app, send_from_directory
-from werkzeug.utils import secure_filename
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Body, Depends
+from fastapi.responses import FileResponse
+from pydantic import BaseModel, Field
 
-# Set up logging
-logger = logging.getLogger("echoforge.api")
+# Import the voice generator
+from app.api.voice_generator import voice_generator
+from app.core.task_manager import TaskManager
 
-# Create a thread pool for async tasks
-executor = ThreadPoolExecutor(max_workers=2)
-tasks = {}  # Store tasks by ID
-task_lock = Lock()  # Lock for thread safety
+# Setup logging
+logger = logging.getLogger(__name__)
 
-# Create API blueprint
-api_bp = Blueprint("api", __name__, url_prefix="/api")
+# Create API router
+router = APIRouter(prefix="/api/v1", tags=["api"])
 
-def register_api_routes(app):
-    """Register the API routes with the Flask application."""
-    app.register_blueprint(api_bp)
+# Task manager for handling background tasks
+task_manager = TaskManager()
 
-# API Routes
-@api_bp.route("/health", methods=["GET"])
-def health_check():
-    """Simple health check endpoint."""
-    return jsonify({"status": "healthy", "version": "0.1.0"})
+# Request and response models
+class GenerationOptions(BaseModel):
+    """Model for generation options."""
+    temperature: float = Field(0.5, ge=0.0, le=1.0, description="Controls randomness in generation")
+    top_k: int = Field(80, ge=1, le=100, description="Limits token selection to top k most likely")
+    device: str = Field("cpu", description="Device to run generation on (cuda/cpu)")
+    style: str = Field("short", description="Voice style")
 
-@api_bp.route("/voices", methods=["GET"])
-def get_voices():
-    """Return the list of available voices."""
-    voice_dir = current_app.config["VOICE_DIR"]
-    voices = []
-    
+class GenerateRequest(BaseModel):
+    """Model for generate request."""
+    text: str = Field(..., min_length=1, max_length=1000, description="Text to convert to speech")
+    speaker_id: int = Field(1, ge=1, description="ID of the speaker voice to use")
+    options: Optional[GenerationOptions] = Field(None, description="Generation options")
+
+class GenerateResponse(BaseModel):
+    """Model for generate response."""
+    task_id: str = Field(..., description="ID of the generation task")
+    status: str = Field("pending", description="Status of the generation task")
+
+class TaskStatusResponse(BaseModel):
+    """Model for task status response."""
+    task_id: str = Field(..., description="ID of the task")
+    status: str = Field(..., description="Status of the task (pending, processing, completed, failed)")
+    progress: float = Field(0.0, description="Progress of the task (0-100)")
+    result_url: Optional[str] = Field(None, description="URL to the generated voice file")
+    error: Optional[str] = Field(None, description="Error message if task failed")
+
+class VoiceInfo(BaseModel):
+    """Model for voice information."""
+    speaker_id: int = Field(..., description="ID of the speaker voice")
+    name: str = Field(..., description="Name of the voice")
+    gender: str = Field(..., description="Gender of the voice")
+    description: str = Field(..., description="Description of the voice")
+    sample_url: Optional[str] = Field(None, description="URL to a sample of the voice")
+
+# API endpoints
+@router.get("/voices", response_model=List[VoiceInfo])
+async def list_voices():
+    """
+    List all available voices.
+    """
     try:
-        # Process all .wav files in the voice directory
-        for filename in os.listdir(voice_dir):
-            if filename.endswith(".wav"):
-                # Extract metadata from filename (convention: speaker_id_temp_value_topk_value_style.wav)
-                parts = filename.replace(".wav", "").split("_")
-                
-                if len(parts) >= 6:
-                    voice_info = {
-                        "filename": filename,
-                        "filepath": os.path.join("voices", filename),
-                        "speaker_id": int(parts[1]) if parts[1].isdigit() else 0,
-                        "gender": "male" if int(parts[1]) % 2 == 1 else "female" if int(parts[1]) % 2 == 0 else "unknown",
-                        "temperature": float(parts[3]) if parts[3].replace(".", "", 1).isdigit() else 0.5,
-                        "topk": int(parts[5]) if parts[5].isdigit() else 50,
-                        "style": " ".join(parts[6:]) if len(parts) > 6 else "default",
-                        "character_name": None,
-                        "character_role": None,
-                        "character_description": None,
-                    }
-                    
-                    # Check if there's a corresponding character JSON file
-                    character_file = os.path.join(
-                        current_app.config["CHARACTER_DIR"],
-                        f"{filename.replace('.wav', '.json')}"
-                    )
-                    
-                    if os.path.exists(character_file):
-                        import json
-                        try:
-                            with open(character_file, "r") as f:
-                                character_data = json.load(f)
-                                voice_info.update(character_data)
-                        except Exception as e:
-                            logger.error(f"Error loading character data for {filename}: {e}")
-                    
-                    voices.append(voice_info)
-                else:
-                    # Handle simple filename format without detailed metadata
-                    voices.append({
-                        "filename": filename,
-                        "filepath": os.path.join("voices", filename),
-                        "speaker_id": 0,
-                        "gender": "unknown",
-                        "temperature": 0.5,
-                        "topk": 50,
-                        "style": "default",
-                        "character_name": filename.replace(".wav", ""),
-                        "character_role": None,
-                        "character_description": None,
-                    })
+        voices = voice_generator.list_available_voices()
+        return voices
     except Exception as e:
-        logger.error(f"Error loading voices: {e}")
-        return jsonify({"error": str(e)}), 500
-    
-    return jsonify(voices)
+        logger.error(f"Error listing voices: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to list voices: {str(e)}")
 
-@api_bp.route("/characters", methods=["GET"])
-def get_characters():
-    """Return the list of available character profiles."""
-    character_dir = current_app.config["CHARACTER_DIR"]
-    characters = []
+@router.post("/generate", response_model=GenerateResponse)
+async def generate_voice(
+    request: GenerateRequest,
+    background_tasks: BackgroundTasks
+):
+    """
+    Generate voice from text.
     
-    try:
-        # Process all .json files in the character directory
-        for filename in os.listdir(character_dir):
-            if filename.endswith(".json"):
-                character_file = os.path.join(character_dir, filename)
-                
-                import json
-                try:
-                    with open(character_file, "r") as f:
-                        character_data = json.load(f)
-                        character_data["filename"] = filename
-                        characters.append(character_data)
-                except Exception as e:
-                    logger.error(f"Error loading character data for {filename}: {e}")
-    except Exception as e:
-        logger.error(f"Error loading characters: {e}")
-        return jsonify({"error": str(e)}), 500
+    The generation is performed asynchronously and a task ID is returned.
+    Use the /tasks/{task_id} endpoint to check the status of the task.
+    """
+    # Validate request
+    if not request.text.strip():
+        raise HTTPException(status_code=400, detail="Text cannot be empty")
     
-    return jsonify(characters)
+    # Create task ID
+    task_id = str(uuid.uuid4())
+    
+    # Get options with defaults if not provided
+    options = request.options or GenerationOptions()
+    
+    # Create task metadata
+    task_data = {
+        "text": request.text,
+        "speaker_id": request.speaker_id,
+        "temperature": options.temperature,
+        "top_k": options.top_k,
+        "device": options.device,
+        "style": options.style,
+        "created_at": time.time(),
+    }
+    
+    # Register task
+    task_manager.register_task(task_id, task_data)
+    
+    # Add background task for generation
+    background_tasks.add_task(
+        _generate_voice_task,
+        task_id=task_id,
+        text=request.text,
+        speaker_id=request.speaker_id,
+        temperature=options.temperature,
+        top_k=options.top_k,
+        device=options.device,
+        style=options.style
+    )
+    
+    return {"task_id": task_id, "status": "pending"}
 
-@api_bp.route("/characters", methods=["POST"])
-def create_character():
-    """Create a new character profile."""
-    try:
-        character_data = request.json
-        
-        if not character_data:
-            return jsonify({"error": "No character data provided"}), 400
-        
-        if "character_name" not in character_data:
-            return jsonify({"error": "Character name is required"}), 400
-        
-        # Generate filename from character name
-        filename = secure_filename(
-            f"{character_data['character_name'].lower().replace(' ', '_')}.json"
-        )
-        
-        character_file = os.path.join(current_app.config["CHARACTER_DIR"], filename)
-        
-        import json
-        with open(character_file, "w") as f:
-            json.dump(character_data, f, indent=2)
-        
-        return jsonify({"status": "success", "filename": filename}), 201
+@router.get("/tasks/{task_id}", response_model=TaskStatusResponse)
+async def get_task_status(task_id: str):
+    """
+    Get the status of a voice generation task.
+    """
+    # Check if task exists
+    task = task_manager.get_task(task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
     
-    except Exception as e:
-        logger.error(f"Error creating character: {e}")
-        return jsonify({"error": str(e)}), 500
+    # Build response
+    response = {
+        "task_id": task_id,
+        "status": task["status"],
+        "progress": task.get("progress", 0.0),
+        "result_url": None,
+        "error": None
+    }
+    
+    # Add result URL if completed
+    if task["status"] == "completed" and "output_path" in task:
+        output_path = task["output_path"]
+        filename = os.path.basename(output_path)
+        response["result_url"] = f"/api/v1/voices/{filename}"
+    
+    # Add error if failed
+    if task["status"] == "failed" and "error" in task:
+        response["error"] = task["error"]
+    
+    return response
 
-@api_bp.route("/generate", methods=["POST"])
-def generate_speech():
-    """Generate speech from text using a voice profile."""
-    text = request.json.get("text", "")
-    voice_path = request.json.get("voice", "")
-    device = request.json.get("device", "auto")
+@router.get("/voices/{filename}")
+async def get_voice_file(filename: str):
+    """
+    Get a generated voice file.
+    """
+    output_dir = voice_generator.output_dir
+    file_path = os.path.join(output_dir, filename)
     
-    if not text:
-        return jsonify({"error": "Text is required"}), 400
+    # Check if file exists
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail=f"Voice file {filename} not found")
     
-    if not voice_path:
-        return jsonify({"error": "Voice path is required"}), 400
-    
+    # Return file
+    return FileResponse(
+        file_path, 
+        media_type="audio/wav",
+        filename=filename
+    )
+
+# Background task function for voice generation
+async def _generate_voice_task(
+    task_id: str,
+    text: str,
+    speaker_id: int,
+    temperature: float,
+    top_k: int,
+    device: str,
+    style: str
+):
+    """Background task to generate voice."""
     try:
-        # Create a unique task ID
-        task_id = str(int(time.time() * 1000))
+        # Update task status
+        task_manager.update_task(task_id, {"status": "processing", "progress": 10.0})
         
-        with task_lock:
-            tasks[task_id] = {
-                "status": "pending",
-                "progress": 0,
-                "error": None,
-                "output": None,
-                "text_length": len(text),
-                "start_time": time.time()
-            }
-        
-        # Submit the generation task to run in the background
-        executor.submit(
-            perform_generation, 
-            task_id=task_id,
+        # Generate voice
+        output_path, error = voice_generator.generate(
             text=text,
-            voice_path=voice_path,
-            device=device,
-        )
-        
-        return jsonify({"task_id": task_id})
-    
-    except Exception as e:
-        logger.exception(f"Error submitting generation task: {e}")
-        return jsonify({"error": str(e)}), 500
-
-@api_bp.route("/status/<task_id>", methods=["GET"])
-def get_task_status(task_id):
-    """Get the status of a generation task."""
-    with task_lock:
-        if task_id not in tasks:
-            return jsonify({"error": "Task not found"}), 404
-        
-        return jsonify(tasks[task_id])
-
-@api_bp.route("/output/<path:filename>", methods=["GET"])
-def serve_output(filename):
-    """Serve generated output files."""
-    return send_from_directory(current_app.config["OUTPUT_DIR"], filename)
-
-@api_bp.route("/voices/<path:filename>", methods=["GET"])
-def serve_voice(filename):
-    """Serve voice sample files."""
-    return send_from_directory(current_app.config["VOICE_DIR"], filename)
-
-@api_bp.route("/diagnostics", methods=["GET"])
-def diagnostics():
-    """Run a diagnostic check on the system."""
-    import platform
-    import psutil
-    
-    try:
-        # System info
-        system_info = {
-            "platform": platform.platform(),
-            "python_version": platform.python_version(),
-            "cpu_count": psutil.cpu_count(logical=False),
-            "logical_cpu_count": psutil.cpu_count(logical=True),
-            "memory_total_gb": round(psutil.virtual_memory().total / (1024**3), 2),
-            "memory_available_gb": round(psutil.virtual_memory().available / (1024**3), 2)
-        }
-        
-        # PyTorch and CUDA info
-        torch_info = {}
-        try:
-            import torch
-            torch_info = {
-                "torch_version": torch.__version__,
-                "cuda_available": torch.cuda.is_available(),
-                "cuda_device_count": torch.cuda.device_count() if torch.cuda.is_available() else 0,
-            }
-            
-            # Add CUDA device info if available
-            if torch.cuda.is_available():
-                device = torch.cuda.current_device()
-                free_memory = torch.cuda.get_device_properties(device).total_memory - torch.cuda.memory_allocated(device)
-                free_memory_mb = free_memory / (1024 * 1024)
-                torch_info["cuda_device_name"] = torch.cuda.get_device_name(device)
-                torch_info["cuda_device_capability"] = torch.cuda.get_device_capability(device)
-                torch_info["cuda_free_memory_mb"] = round(free_memory_mb, 2)
-        except ImportError:
-            torch_info["error"] = "PyTorch not installed"
-        
-        # Directory info
-        directory_info = {
-            "data_dir": os.path.exists(current_app.config["DATA_DIR"]),
-            "voice_dir": os.path.exists(current_app.config["VOICE_DIR"]),
-            "character_dir": os.path.exists(current_app.config["CHARACTER_DIR"]),
-            "output_dir": os.path.exists(current_app.config["OUTPUT_DIR"]),
-            "voice_count": len([f for f in os.listdir(current_app.config["VOICE_DIR"]) 
-                               if f.endswith(".wav")]) if os.path.exists(current_app.config["VOICE_DIR"]) else 0,
-            "character_count": len([f for f in os.listdir(current_app.config["CHARACTER_DIR"]) 
-                                  if f.endswith(".json")]) if os.path.exists(current_app.config["CHARACTER_DIR"]) else 0,
-            "output_count": len([f for f in os.listdir(current_app.config["OUTPUT_DIR"]) 
-                               if f.endswith(".wav")]) if os.path.exists(current_app.config["OUTPUT_DIR"]) else 0,
-        }
-        
-        return jsonify({
-            "system": system_info,
-            "torch": torch_info,
-            "directories": directory_info,
-            "status": "healthy"
-        })
-    
-    except Exception as e:
-        logger.exception(f"Error running diagnostics: {e}")
-        return jsonify({"error": str(e), "status": "error"}), 500
-
-def perform_generation(task_id, text, voice_path, device):
-    """Perform speech generation in a background thread."""
-    try:
-        with task_lock:
-            if task_id not in tasks:
-                return
-            
-            tasks[task_id]["status"] = "running"
-            tasks[task_id]["progress"] = 10
-        
-        logger.info(f"Starting generation for task {task_id}: '{text}'")
-        
-        # Import the voice generator here to avoid circular imports
-        from app.core.voice_generator import generate_speech
-        
-        # Update progress
-        with task_lock:
-            tasks[task_id]["progress"] = 30
-        
-        # Generate a unique output filename
-        import datetime
-        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_filename = f"generated_{timestamp}.wav"
-        output_path = os.path.join(current_app.config["OUTPUT_DIR"], output_filename)
-        
-        # Generate speech
-        start_time = time.time()
-        success = generate_speech(
-            text=text,
-            voice_path=voice_path,
-            output_path=output_path,
+            speaker_id=speaker_id,
+            temperature=temperature,
+            top_k=top_k,
+            style=style,
             device=device
         )
-        generation_time = time.time() - start_time
         
-        # Update task status based on generation result
-        with task_lock:
-            tasks[task_id]["progress"] = 90
+        # Handle result
+        if error:
+            task_manager.update_task(task_id, {
+                "status": "failed",
+                "error": error,
+                "progress": 100.0
+            })
+        else:
+            task_manager.update_task(task_id, {
+                "status": "completed",
+                "output_path": output_path,
+                "progress": 100.0
+            })
             
-            if success and os.path.exists(output_path):
-                tasks[task_id]["status"] = "complete"
-                tasks[task_id]["progress"] = 100
-                tasks[task_id]["output"] = f"output/{output_filename}"
-                tasks[task_id]["generation_time"] = generation_time
-                logger.info(f"Generation complete for task {task_id}. Audio saved to: {output_path}")
-            else:
-                tasks[task_id]["status"] = "error"
-                tasks[task_id]["progress"] = 100
-                tasks[task_id]["error"] = "Failed to generate speech output"
-                logger.error(f"Generation failed for task {task_id}")
-    
     except Exception as e:
-        logger.exception(f"Error during speech generation: {e}")
-        with task_lock:
-            if task_id in tasks:
-                tasks[task_id]["status"] = "error"
-                tasks[task_id]["progress"] = 100
-                tasks[task_id]["error"] = str(e) 
+        logger.error(f"Error in voice generation task: {str(e)}")
+        task_manager.update_task(task_id, {
+            "status": "failed",
+            "error": f"Internal server error: {str(e)}",
+            "progress": 100.0
+        }) 

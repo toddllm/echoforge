@@ -1,36 +1,13 @@
-# Core dependencies
-flask==2.3.2
-flask-cors==4.0.0
-flask-restful==0.3.10
-gunicorn==21.2.0
+# EchoForge Requirements
+fastapi==0.104.1
+uvicorn==0.23.2
 pydantic==2.4.2
-python-dotenv==1.0.0
-
-# Database
-sqlalchemy==2.0.17
-alembic==1.12.0
-
-# AI and ML
+jinja2==3.1.2
+python-multipart==0.0.6
+aiofiles==23.2.1
 torch==2.1.0
 torchaudio==2.1.0
-numpy==1.24.3
-scipy==1.10.1
-librosa==0.10.0
-
-# Audio processing
-pydub==0.25.1
+numpy==1.26.0
 soundfile==0.12.1
-
-# Utilities
-tqdm==4.65.0
-requests==2.31.0
-pillow==10.0.0
-matplotlib==3.7.2
-phonemizer==3.3.0
-
-# Development tools
-pytest==7.4.0
-black==23.7.0
-isort==5.12.0
-mypy==1.5.1
-
+librosa==0.10.1
+python-dotenv==1.0.0 
