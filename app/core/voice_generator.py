@@ -11,7 +11,7 @@ import torch
 import torchaudio
 import numpy as np
 from pathlib import Path
-from typing import Optional, List, Dict, Any, Tuple
+from typing import Optional, List, Dict, Any, Tuple, Union
 
 # Set up logging
 logger = logging.getLogger("echoforge.core.voice_generator")
@@ -21,7 +21,7 @@ class VoiceGenerator:
     Main voice generator class that handles text-to-speech generation.
     """
     
-    def __init__(self, model_path: str, device: str = "auto"):
+    def __init__(self, model_path: Optional[str] = None, device: str = "auto"):
         """
         Initialize the voice generator.
         
@@ -40,7 +40,11 @@ class VoiceGenerator:
         logger.info(f"Initializing voice generator on device: {self.device}")
         
         # Load model (placeholder for actual model loading)
-        self._load_model()
+        if model_path:
+            self._load_model()
+        else:
+            self.model = None
+            self.sample_rate = 24000  # Common sample rate for TTS models
     
     def _load_model(self):
         """Load the TTS model."""
@@ -64,7 +68,7 @@ class VoiceGenerator:
         speaker_id: int = 1,
         temperature: float = 0.5,
         top_k: int = 50
-    ) -> torch.Tensor:
+    ) -> Union[torch.Tensor, bytes]:
         """
         Generate speech from text.
         
@@ -75,8 +79,21 @@ class VoiceGenerator:
             top_k: Top-k for generation sampling
             
         Returns:
-            Tensor containing audio waveform
+            Tensor containing audio waveform or bytes of audio data
         """
+        # Validate inputs
+        if not text or not text.strip():
+            raise ValueError("Text cannot be empty")
+            
+        if speaker_id < 0:
+            raise ValueError("Invalid speaker ID")
+            
+        if temperature < 0 or temperature > 1:
+            raise ValueError("Temperature must be between 0 and 1")
+            
+        if top_k < 1:
+            raise ValueError("top_k must be at least 1")
+        
         logger.info(f"Generating speech for text: '{text}'")
         logger.info(f"Parameters: speaker_id={speaker_id}, temperature={temperature}, top_k={top_k}")
         

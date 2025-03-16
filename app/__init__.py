@@ -12,3 +12,4 @@ This package contains the core components of the EchoForge application:
 """
 
 __version__ = "0.1.0"
+

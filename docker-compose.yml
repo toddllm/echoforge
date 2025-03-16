@@ -1,0 +1,59 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    restart: always
+    depends_on:
+      - redis
+      - postgres
+    volumes:
+      - model-data:/app/models
+      - voice-data:/app/data/voices
+    env_file: .env
+    ports:
+      - "8000:8000"
+
+  worker:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.worker
+    depends_on:
+      - redis
+      - postgres
+    volumes:
+      - model-data:/app/models
+      - voice-data:/app/data/voices
+    env_file: .env
+
+  postgres:
+    image: postgres:15
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    env_file: .env.db
+    environment:
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_USER=postgres
+      - POSTGRES_DB=echoforge
+
+  redis:
+    image: redis:7
+    volumes:
+      - redis-data:/data
+
+  nginx:
+    image: nginx:1.25
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/nginx:/etc/nginx/conf.d
+      - ./static:/var/www/static
+    depends_on:
+      - app
+
+volumes:
+  postgres-data:
+  redis-data:
+  model-data:
+  voice-data: 
