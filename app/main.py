@@ -29,12 +29,13 @@ from app.api.admin import router as admin_router
 # Setup logging
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[
+        logging.FileHandler(os.path.expanduser("~/echoforge/app.log")),
         logging.StreamHandler()
     ]
 )
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("echoforge")
 
 # Define lifespan context manager
 @asynccontextmanager
@@ -84,7 +85,8 @@ app = FastAPI(
     title=config.APP_NAME,
     description=config.APP_DESCRIPTION,
     version=config.APP_VERSION,
-    lifespan=lifespan
+    lifespan=lifespan,
+    openapi_url="/api/v1/openapi.json"
 )
 
 # Add CORS middleware
@@ -191,4 +193,25 @@ async def general_exception_handler(request: Request, exc: Exception):
     return JSONResponse(
         status_code=500,
         content={"detail": "Internal server error", "message": str(exc)},
-    ) 
+    )
+
+# Write the port to a file for other scripts to use
+def write_port_to_file():
+    """Write the server port to a file for other scripts to use."""
+    port_file = os.path.expanduser("~/.echoforge_port")
+    try:
+        # Get the port from the runner script's environment variable or use default
+        port = os.environ.get("ECHOFORGE_PORT", "8765")
+        with open(port_file, "w") as f:
+            f.write(port)
+        logger.info(f"Server port {port} written to {port_file}")
+    except Exception as e:
+        logger.error(f"Failed to write port to file: {e}")
+
+# Call this function when the server starts
+@app.on_event("startup")
+async def startup_event():
+    # Get the port from the environment or use default
+    port = os.environ.get("ECHOFORGE_PORT", "8765")
+    logger.info(f"Starting EchoForge server on port {port}")
+    write_port_to_file() 
