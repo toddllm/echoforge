@@ -2,6 +2,10 @@
 
 EchoForge is a web application for generating character voices using deep learning models. It provides a simple interface for converting text to speech with various voice options.
 
+## Repository
+
+https://github.com/toddllm/echoforge
+
 ## Features
 
 - Text-to-speech generation with multiple character voices
@@ -24,7 +28,7 @@ EchoForge uses [uv](https://github.com/astral-sh/uv) for fast, reliable Python p
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/echoforge.git
+git clone https://github.com/toddllm/echoforge.git
 cd echoforge
 
 # Run the setup script

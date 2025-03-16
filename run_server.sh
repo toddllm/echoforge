@@ -30,8 +30,9 @@ echo -e "${YELLOW}Host:${NC} $DEFAULT_HOST"
 echo -e "${YELLOW}Port:${NC} $DEFAULT_PORT"
 echo -e "${YELLOW}Public:${NC} $(python -c "from app.core import config; print('Yes' if config.ALLOW_PUBLIC_SERVING else 'No')")"
 echo -e "${YELLOW}Auth:${NC} $(python -c "from app.core import config; print('Yes' if config.ENABLE_AUTH else 'No')")"
+echo -e "${YELLOW}Auto-reload:${NC} Enabled"
 echo
 
-# Run the server
-echo -e "${GREEN}Starting EchoForge server...${NC}"
-python run.py --host $DEFAULT_HOST --port $DEFAULT_PORT 
+# Run the server with auto-reload enabled
+echo -e "${GREEN}Starting EchoForge server with auto-reload...${NC}"
+python run.py --host $DEFAULT_HOST --port $DEFAULT_PORT --reload 
