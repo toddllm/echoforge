@@ -13,7 +13,10 @@ from pathlib import Path
 from typing import List, Dict, Any, Tuple, Optional, Union
 
 from app.core import config
-from app.models import create_csm_model, CSMModel, PlaceholderCSMModel, CSMModelError
+from app.models import (
+    create_csm_model, CSMModel, PlaceholderCSMModel, CSMModelError,
+    create_direct_csm, DirectCSM, DirectCSMError
+)
 
 # Setup logging
 logger = logging.getLogger(__name__)
@@ -32,6 +35,7 @@ class VoiceGenerator:
         model_path: str = config.MODEL_PATH,
         output_dir: str = config.OUTPUT_DIR,
         use_placeholder: bool = False,
+        use_direct_csm: bool = True,  # Default to using direct CSM
     ) -> None:
         """
         Initialize the voice generator.
@@ -40,18 +44,21 @@ class VoiceGenerator:
             model_path: Path to the model checkpoint
             output_dir: Directory to store generated voice files
             use_placeholder: Whether to use the placeholder model
+            use_direct_csm: Whether to use the direct CSM implementation
         """
         self.model_path = model_path
         self.output_dir = output_dir
         self.use_placeholder = use_placeholder
+        self.use_direct_csm = use_direct_csm
         self.model = None
+        self.direct_csm = None
         self.is_test_mode = os.environ.get("ECHOFORGE_TEST", "false").lower() == "true"
         
         # Ensure output directory exists
         os.makedirs(self.output_dir, exist_ok=True)
         
-        logger.info("VoiceGenerator initialized with model_path=%s, output_dir=%s", 
-                   model_path, output_dir)
+        logger.info("VoiceGenerator initialized with model_path=%s, output_dir=%s, use_direct_csm=%s", 
+                   model_path, output_dir, use_direct_csm)
     
     def initialize(self, device: str = None) -> bool:
         """
@@ -74,7 +81,7 @@ class VoiceGenerator:
         Returns:
             bool: True if model is loaded, False otherwise
         """
-        return self.model is not None
+        return self.model is not None or self.direct_csm is not None
     
     def load_model(self, device: str = None) -> bool:
         """
@@ -89,7 +96,7 @@ class VoiceGenerator:
         Returns:
             bool: True if model was loaded successfully, False otherwise
         """
-        if self.model is not None:
+        if self.model is not None or self.direct_csm is not None:
             logger.info("Model already loaded")
             return True
             
@@ -100,9 +107,6 @@ class VoiceGenerator:
             return True
         
         try:
-            # Use our CSM model implementation
-            logger.info("Loading CSM model from %s", self.model_path)
-            
             # Determine the best device to use
             if device is None or device == "auto":
                 device = self._determine_device()
@@ -113,6 +117,20 @@ class VoiceGenerator:
                     device = "cpu"
                 logger.info(f"Using explicitly requested device: {device}")
             
+            # Try to load the direct CSM implementation first if enabled
+            if self.use_direct_csm:
+                try:
+                    logger.info("Loading Direct CSM implementation")
+                    self.direct_csm = create_direct_csm(model_path=self.model_path, device=device)
+                    self.direct_csm.initialize()
+                    logger.info("Direct CSM implementation loaded successfully")
+                    return True
+                except DirectCSMError as e:
+                    logger.warning(f"Failed to load Direct CSM implementation: {e}")
+                    logger.info("Falling back to standard CSM model")
+                    self.direct_csm = None
+            
+            # If direct CSM failed or is disabled, use the standard CSM model
             # Create the CSM model - never use placeholder
             self.model = create_csm_model(
                 model_path=self.model_path,
@@ -130,6 +148,19 @@ class VoiceGenerator:
             if device != "cpu" and (device == "cuda" or device == "auto"):
                 logger.info("Attempting to load model on CPU as fallback")
                 try:
+                    # Try loading direct CSM on CPU if enabled
+                    if self.use_direct_csm:
+                        try:
+                            logger.info("Loading Direct CSM implementation on CPU")
+                            self.direct_csm = create_direct_csm(model_path=self.model_path, device="cpu")
+                            self.direct_csm.initialize()
+                            logger.info("Direct CSM implementation loaded successfully on CPU")
+                            return True
+                        except DirectCSMError as e:
+                            logger.warning(f"Failed to load Direct CSM implementation on CPU: {e}")
+                            logger.info("Falling back to standard CSM model on CPU")
+                            self.direct_csm = None
+                    
                     # Try loading on CPU instead
                     self.model = create_csm_model(
                         model_path=self.model_path,
@@ -199,7 +230,7 @@ class VoiceGenerator:
                 - URL to access the file (or None if failed)
         """
         # Ensure model is loaded with the specified device
-        if self.model is None:
+        if not self.is_initialized():
             if not self.load_model(device=device):
                 logger.error("Failed to load model")
                 return None, None
@@ -214,96 +245,138 @@ class VoiceGenerator:
             logger.info(f"Generating voice for text: '{text}' with speaker_id={speaker_id}, "
                        f"temperature={temperature}, top_k={top_k}, device={device}")
             
-            # Generate speech
-            audio, sample_rate = self.model.generate_speech(
-                text=text,
-                speaker_id=speaker_id,
-                temperature=temperature,
-                top_k=top_k,
-                device=device
-            )
-            
-            # Save the audio
-            self.model.save_audio(audio, sample_rate, output_path)
-            
-            # Check if file was created
-            if not os.path.exists(output_path):
-                logger.error(f"Output file not created: {output_path}")
-                return None, None
-            
-            # Create URL for accessing the file
-            # Use relative path from output_dir to create URL
-            relative_path = os.path.relpath(output_path, self.output_dir)
-            url = f"/voices/{relative_path}"
-            
-            logger.info(f"Voice generated successfully: {output_path}")
-            return output_path, url
-            
-        except CSMModelError as e:
-            logger.error(f"CSM model error: {e}")
-            # Try again with CPU if we were using CUDA and it failed
-            if device == "cuda" or device == "auto":
-                logger.info("Attempting to fall back to CPU after CUDA error")
+            # Try direct CSM first if available
+            if self.direct_csm is not None:
                 try:
-                    # Generate speech on CPU
-                    audio, sample_rate = self.model.generate_speech(
+                    # Generate speech using direct CSM
+                    audio, sample_rate = self.direct_csm.generate_speech(
                         text=text,
                         speaker_id=speaker_id,
                         temperature=temperature,
                         top_k=top_k,
-                        device="cpu"
+                        device=device
                     )
                     
                     # Save the audio
-                    self.model.save_audio(audio, sample_rate, output_path)
+                    self.direct_csm.save_audio(audio, sample_rate, output_path)
                     
                     # Check if file was created
                     if not os.path.exists(output_path):
-                        logger.error(f"Output file not created during CPU fallback: {output_path}")
-                        return None, None
+                        logger.error(f"Output file not created: {output_path}")
+                        raise DirectCSMError("Output file not created")
                     
                     # Create URL for accessing the file
+                    # Use relative path from output_dir to create URL
                     relative_path = os.path.relpath(output_path, self.output_dir)
                     url = f"/voices/{relative_path}"
                     
-                    logger.info(f"Voice generated successfully on CPU fallback: {output_path}")
+                    logger.info(f"Voice generated successfully with Direct CSM: {output_path}")
                     return output_path, url
-                except Exception as cpu_e:
-                    logger.error(f"CPU fallback also failed: {cpu_e}")
+                    
+                except DirectCSMError as e:
+                    logger.warning(f"Direct CSM failed: {e}, falling back to standard CSM model")
+                    # Fall back to standard CSM model
+            
+            # If direct CSM failed or is not available, use the standard CSM model
+            if self.model is not None:
+                # Generate speech
+                audio, sample_rate = self.model.generate_speech(
+                    text=text,
+                    speaker_id=speaker_id,
+                    temperature=temperature,
+                    top_k=top_k,
+                    device=device
+                )
+                
+                # Save the audio
+                self.model.save_audio(audio, sample_rate, output_path)
+                
+                # Check if file was created
+                if not os.path.exists(output_path):
+                    logger.error(f"Output file not created: {output_path}")
                     return None, None
-            return None, None
+                
+                # Create URL for accessing the file
+                # Use relative path from output_dir to create URL
+                relative_path = os.path.relpath(output_path, self.output_dir)
+                url = f"/voices/{relative_path}"
+                
+                logger.info(f"Voice generated successfully with standard CSM: {output_path}")
+                return output_path, url
+            else:
+                logger.error("No model available for voice generation")
+                return None, None
+            
         except Exception as e:
             logger.error(f"Error generating voice: {e}")
+            
             # Try again with CPU if we were using CUDA and it failed
             if device == "cuda" or device == "auto":
                 logger.info("Attempting to fall back to CPU after error")
                 try:
-                    # Generate speech on CPU
-                    audio, sample_rate = self.model.generate_speech(
-                        text=text,
-                        speaker_id=speaker_id,
-                        temperature=temperature,
-                        top_k=top_k,
-                        device="cpu"
-                    )
+                    # Try direct CSM on CPU if available
+                    if self.direct_csm is not None:
+                        try:
+                            # Generate speech using direct CSM on CPU
+                            audio, sample_rate = self.direct_csm.generate_speech(
+                                text=text,
+                                speaker_id=speaker_id,
+                                temperature=temperature,
+                                top_k=top_k,
+                                device="cpu"
+                            )
+                            
+                            # Save the audio
+                            self.direct_csm.save_audio(audio, sample_rate, output_path)
+                            
+                            # Check if file was created
+                            if not os.path.exists(output_path):
+                                logger.error(f"Output file not created: {output_path}")
+                                raise DirectCSMError("Output file not created")
+                            
+                            # Create URL for accessing the file
+                            relative_path = os.path.relpath(output_path, self.output_dir)
+                            url = f"/voices/{relative_path}"
+                            
+                            logger.info(f"Voice generated successfully with Direct CSM on CPU: {output_path}")
+                            return output_path, url
+                            
+                        except DirectCSMError as cpu_e:
+                            logger.warning(f"Direct CSM on CPU failed: {cpu_e}, falling back to standard CSM model on CPU")
                     
-                    # Save the audio
-                    self.model.save_audio(audio, sample_rate, output_path)
-                    
-                    # Check if file was created
-                    if not os.path.exists(output_path):
-                        logger.error(f"Output file not created during CPU fallback: {output_path}")
+                    # If direct CSM failed or is not available, use the standard CSM model on CPU
+                    if self.model is not None:
+                        # Generate speech on CPU
+                        audio, sample_rate = self.model.generate_speech(
+                            text=text,
+                            speaker_id=speaker_id,
+                            temperature=temperature,
+                            top_k=top_k,
+                            device="cpu"
+                        )
+                        
+                        # Save the audio
+                        self.model.save_audio(audio, sample_rate, output_path)
+                        
+                        # Check if file was created
+                        if not os.path.exists(output_path):
+                            logger.error(f"Output file not created: {output_path}")
+                            return None, None
+                        
+                        # Create URL for accessing the file
+                        relative_path = os.path.relpath(output_path, self.output_dir)
+                        url = f"/voices/{relative_path}"
+                        
+                        logger.info(f"Voice generated successfully with standard CSM on CPU: {output_path}")
+                        return output_path, url
+                    else:
+                        logger.error("No model available for voice generation on CPU")
                         return None, None
                     
-                    # Create URL for accessing the file
-                    relative_path = os.path.relpath(output_path, self.output_dir)
-                    url = f"/voices/{relative_path}"
-                    
-                    logger.info(f"Voice generated successfully on CPU fallback: {output_path}")
-                    return output_path, url
                 except Exception as cpu_e:
-                    logger.error(f"CPU fallback also failed: {cpu_e}")
+                    logger.error(f"Error generating voice on CPU: {cpu_e}")
                     return None, None
+            
             return None, None
     
     def list_available_voices(self) -> List[Dict[str, Any]]:

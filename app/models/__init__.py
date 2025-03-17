@@ -1,15 +1,19 @@
 """
 Models package for EchoForge.
 
-This package contains the models used for text-to-speech generation.
+This package contains the models used by the EchoForge application.
 """
 
-from .csm_model import CSMModel, PlaceholderCSMModel, create_csm_model, CSMModelError
+from app.models.csm_model import CSMModel, PlaceholderCSMModel, CSMModelError, create_csm_model
+from app.models.direct_csm import DirectCSM, DirectCSMError, create_direct_csm
 
 __all__ = [
     'CSMModel',
     'PlaceholderCSMModel',
-    'create_csm_model',
     'CSMModelError',
+    'create_csm_model',
+    'DirectCSM',
+    'DirectCSMError',
+    'create_direct_csm',
 ]
 
