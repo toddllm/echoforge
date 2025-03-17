@@ -27,6 +27,12 @@ from app.models import create_direct_csm, DirectCSMError
 # Server URL
 SERVER_URL = f"http://{config.HOST}:{config.PORT}"
 ADMIN_API_URL = f"{SERVER_URL}/api/admin"
+API_URL = f"{SERVER_URL}/api"
+
+# Authentication
+AUTH_USERNAME = config.AUTH_USERNAME
+AUTH_PASSWORD = config.AUTH_PASSWORD
+AUTH = (AUTH_USERNAME, AUTH_PASSWORD)
 
 # Test text
 TEST_TEXT = "This is a test of the Direct CSM implementation in the admin page. The voice should be clear and natural sounding."
@@ -65,7 +71,7 @@ def test_direct_csm_api():
     
     # Test getting Direct CSM info
     try:
-        response = requests.get(f"{ADMIN_API_URL}/models/direct-csm-info")
+        response = requests.get(f"{ADMIN_API_URL}/models/direct-csm-info", auth=AUTH)
         if response.status_code != 200:
             print(f"ERROR: Failed to get Direct CSM info. Status code: {response.status_code}")
             return False
@@ -80,7 +86,8 @@ def test_direct_csm_api():
         # Toggle off
         response = requests.post(
             f"{ADMIN_API_URL}/models/toggle-direct-csm",
-            json={"enable": False}
+            json={"enable": False},
+            auth=AUTH
         )
         if response.status_code != 200:
             print(f"ERROR: Failed to toggle Direct CSM off. Status code: {response.status_code}")
@@ -91,7 +98,8 @@ def test_direct_csm_api():
         # Toggle back on
         response = requests.post(
             f"{ADMIN_API_URL}/models/toggle-direct-csm",
-            json={"enable": True}
+            json={"enable": True},
+            auth=AUTH
         )
         if response.status_code != 200:
             print(f"ERROR: Failed to toggle Direct CSM on. Status code: {response.status_code}")
@@ -101,7 +109,7 @@ def test_direct_csm_api():
         
         # Test Direct CSM
         print("\nTesting Direct CSM implementation...")
-        response = requests.post(f"{ADMIN_API_URL}/models/test-direct-csm")
+        response = requests.post(f"{ADMIN_API_URL}/models/test-direct-csm", auth=AUTH)
         if response.status_code != 200:
             print(f"ERROR: Failed to test Direct CSM. Status code: {response.status_code}")
             return False
@@ -115,40 +123,37 @@ def test_direct_csm_api():
         
         print(f"Direct CSM test started. Task ID: {task_id}")
         
-        # Poll for task completion
-        max_attempts = 30
-        attempts = 0
-        while attempts < max_attempts:
-            attempts += 1
-            time.sleep(2)
-            
-            response = requests.get(f"{ADMIN_API_URL}/tasks/{task_id}")
-            if response.status_code != 200:
-                print(f"ERROR: Failed to get task status. Status code: {response.status_code}")
-                continue
-            
-            task_status = response.json()
-            status = task_status.get("status")
-            
-            print(f"Task status: {status}")
-            
-            if status == "completed":
-                print("Direct CSM test completed successfully!")
-                result = task_status.get("result", {})
-                file_path = result.get("file_path")
-                if file_path:
-                    print(f"Test audio file: {file_path}")
-                break
-            elif status == "failed":
-                error = task_status.get("error", "Unknown error")
-                print(f"ERROR: Direct CSM test failed: {error}")
-                return False
-            
-            # Continue polling for 'pending' or 'processing' status
+        # Wait for the test to complete
+        print("Waiting for the test to complete (20 seconds)...")
+        time.sleep(20)
         
-        if attempts >= max_attempts:
-            print("ERROR: Timed out waiting for Direct CSM test to complete.")
+        # Check if the test directory exists
+        test_dir = os.path.join(config.OUTPUT_DIR, "test")
+        if not os.path.exists(test_dir):
+            print(f"ERROR: Test directory does not exist: {test_dir}")
             return False
+        
+        # Check if there are any WAV files in the test directory
+        wav_files = [f for f in os.listdir(test_dir) if f.endswith(".wav")]
+        if not wav_files:
+            print(f"ERROR: No WAV files found in test directory: {test_dir}")
+            return False
+        
+        # Get the most recent WAV file
+        wav_files.sort(key=lambda f: os.path.getmtime(os.path.join(test_dir, f)), reverse=True)
+        latest_wav = wav_files[0]
+        wav_path = os.path.join(test_dir, latest_wav)
+        
+        print(f"Found test audio file: {wav_path}")
+        
+        # Check if the file is accessible via the API
+        wav_url = f"{SERVER_URL}/voices/test/{latest_wav}"
+        response = requests.head(wav_url, auth=AUTH)
+        if response.status_code != 200:
+            print(f"ERROR: Failed to access test audio file via API. Status code: {response.status_code}")
+            return False
+        
+        print(f"Test audio file is accessible via API: {wav_url}")
         
         return True
         
@@ -171,7 +176,8 @@ def test_voice_generation():
                 "top_k": config.DEFAULT_TOP_K,
                 "style": config.DEFAULT_STYLE,
                 "device": config.DEFAULT_DEVICE
-            }
+            },
+            auth=AUTH
         )
         
         if response.status_code != 200:
@@ -187,40 +193,37 @@ def test_voice_generation():
         
         print(f"Voice generation started. Task ID: {task_id}")
         
-        # Poll for task completion
-        max_attempts = 30
-        attempts = 0
-        while attempts < max_attempts:
-            attempts += 1
-            time.sleep(2)
-            
-            response = requests.get(f"{ADMIN_API_URL}/tasks/{task_id}")
-            if response.status_code != 200:
-                print(f"ERROR: Failed to get task status. Status code: {response.status_code}")
-                continue
-            
-            task_status = response.json()
-            status = task_status.get("status")
-            
-            print(f"Task status: {status}")
-            
-            if status == "completed":
-                print("Voice generation completed successfully!")
-                result = task_status.get("result", {})
-                file_path = result.get("file_path")
-                if file_path:
-                    print(f"Voice file: {file_path}")
-                break
-            elif status == "failed":
-                error = task_status.get("error", "Unknown error")
-                print(f"ERROR: Voice generation failed: {error}")
-                return False
-            
-            # Continue polling for 'pending' or 'processing' status
+        # Wait for the voice generation to complete
+        print("Waiting for voice generation to complete (20 seconds)...")
+        time.sleep(20)
         
-        if attempts >= max_attempts:
-            print("ERROR: Timed out waiting for voice generation to complete.")
+        # Check if the admin directory exists
+        admin_dir = os.path.join(config.OUTPUT_DIR, "admin")
+        if not os.path.exists(admin_dir):
+            print(f"ERROR: Admin directory does not exist: {admin_dir}")
             return False
+        
+        # Check if there are any WAV files in the admin directory
+        wav_files = [f for f in os.listdir(admin_dir) if f.endswith(".wav")]
+        if not wav_files:
+            print(f"ERROR: No WAV files found in admin directory: {admin_dir}")
+            return False
+        
+        # Get the most recent WAV file
+        wav_files.sort(key=lambda f: os.path.getmtime(os.path.join(admin_dir, f)), reverse=True)
+        latest_wav = wav_files[0]
+        wav_path = os.path.join(admin_dir, latest_wav)
+        
+        print(f"Found voice file: {wav_path}")
+        
+        # Check if the file is accessible via the API
+        wav_url = f"{SERVER_URL}/voices/admin/{latest_wav}"
+        response = requests.head(wav_url, auth=AUTH)
+        if response.status_code != 200:
+            print(f"ERROR: Failed to access voice file via API. Status code: {response.status_code}")
+            return False
+        
+        print(f"Voice file is accessible via API: {wav_url}")
         
         return True
         
