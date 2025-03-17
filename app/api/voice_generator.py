@@ -516,6 +516,51 @@ class VoiceGenerator:
         """
         return self.cleanup()
 
+    def generate_voice(
+        self,
+        text: str,
+        speaker_id: int = config.DEFAULT_SPEAKER_ID,
+        temperature: float = config.DEFAULT_TEMPERATURE,
+        top_k: int = config.DEFAULT_TOP_K,
+        style: str = config.DEFAULT_STYLE,
+        device: str = "cuda",
+        reload_model: bool = False
+    ) -> str:
+        """
+        Generate voice from text and return the output file path.
+        
+        This is a simplified version of the generate method that returns only the file path.
+        
+        Args:
+            text: Text to convert to speech
+            speaker_id: Speaker ID to use
+            temperature: Temperature for sampling (higher = more diverse)
+            top_k: Number of highest probability tokens to consider
+            style: Voice style to use (not used in current CSM implementation)
+            device: Device to use for inference ('cuda' or 'cpu')
+            reload_model: Whether to reload the model before generation
+            
+        Returns:
+            Path to the generated audio file (or None if failed)
+        """
+        # If reload_model is True, unload the model first
+        if reload_model and self.is_initialized():
+            logger.info("Reloading model as requested")
+            self.model = None
+            self.direct_csm = None
+        
+        # Generate the voice using the existing method
+        output_path, _ = self.generate(
+            text=text,
+            speaker_id=speaker_id,
+            temperature=temperature,
+            top_k=top_k,
+            style=style,
+            device=device
+        )
+        
+        return output_path
+
 
 class MockModel:
     """Mock model for testing."""

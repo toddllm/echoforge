@@ -19,6 +19,7 @@ from app.api.routes import router as api_router
 from app.api.voice_browser import router as voice_browser_router
 from app.ui.routes import router as ui_router
 from app.core.voice_generator import VoiceGenerator
+from app.core import config  # Import config
 
 # Configure logging
 logging.basicConfig(
@@ -82,7 +83,7 @@ def parse_args():
     parser.add_argument(
         "--port", 
         type=int, 
-        default=8000, 
+        default=config.PORT, 
         help="Port to bind the server to"
     )
     parser.add_argument(

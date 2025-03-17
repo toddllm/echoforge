@@ -31,6 +31,10 @@ document.addEventListener('DOMContentLoaded', function() {
     if (document.querySelector('.config-tabs')) {
         initConfigManagement();
     }
+    
+    if (document.querySelector('.voice-generation-section')) {
+        initVoiceGeneration();
+    }
 });
 
 /**
@@ -845,4 +849,246 @@ function showMessage(text, type = 'info') {
             }, 500);
         }
     }, 5000);
-} 
+}
+
+/**
+ * Voice Generation Interface
+ */
+function initVoiceGeneration() {
+    console.log('Initializing voice generation interface');
+    
+    // Range slider value display
+    const temperatureSlider = document.getElementById('temperature');
+    const temperatureValue = document.getElementById('temperature-value');
+    if (temperatureSlider && temperatureValue) {
+        temperatureSlider.addEventListener('input', function() {
+            temperatureValue.textContent = this.value;
+        });
+    }
+    
+    // Voice generation form submission
+    const generationForm = document.getElementById('voice-generation-form');
+    if (generationForm) {
+        generationForm.addEventListener('submit', function(event) {
+            event.preventDefault();
+            
+            // Get form values
+            const text = document.getElementById('text-to-speak').value.trim();
+            const speakerId = parseInt(document.getElementById('speaker-voice').value);
+            const temperature = parseFloat(document.getElementById('temperature').value);
+            
+            // Validate form
+            if (!text) {
+                showGenerationError('Please enter text to convert to speech.');
+                return;
+            }
+            
+            // Show generation status
+            showGenerationStatus('Starting voice generation...', 0);
+            
+            // Disable form submission while processing
+            document.getElementById('generate-voice-btn').disabled = true;
+            
+            // Clear previous error or result display
+            document.querySelector('.generation-error').style.display = 'none';
+            document.querySelector('.generation-result').style.display = 'none';
+            document.querySelector('.device-info').style.display = 'none';
+            document.querySelector('.status-message').style.display = 'none';
+            
+            // Call the API to generate voice
+            console.log(`Generating voice: speakerId=${speakerId}, temperature=${temperature}`);
+            
+            fetch('/api/admin/generate-voice', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    text: text,
+                    speaker_id: speakerId,
+                    temperature: temperature,
+                    top_k: 50,
+                    device: 'cuda',
+                    reload_model: false
+                })
+            })
+            .then(response => {
+                if (!response.ok) {
+                    return response.json().then(data => {
+                        throw new Error(data.detail || 'Error starting voice generation');
+                    });
+                }
+                return response.json();
+            })
+            .then(data => {
+                console.log('Voice generation started:', data);
+                
+                if (data.task_id) {
+                    showGenerationStatus('Voice generation started', 10);
+                    pollGenerationStatus(data.task_id);
+                } else {
+                    showGenerationError('No task ID returned from server');
+                    document.getElementById('generate-voice-btn').disabled = false;
+                }
+            })
+            .catch(error => {
+                console.error('Error starting voice generation:', error);
+                showGenerationError(error.message);
+                document.getElementById('generate-voice-btn').disabled = false;
+            });
+        });
+    }
+    
+    function pollGenerationStatus(taskId) {
+        console.log('Starting to poll task status for:', taskId);
+        let pollCount = 0;
+        const maxPolls = 30; // Maximum number of polls before giving up
+        
+        const pollInterval = setInterval(() => {
+            pollCount++;
+            
+            // Only log every 5th poll to reduce noise
+            const shouldLog = pollCount % 5 === 0;
+            if (shouldLog) {
+                console.log(`Poll #${pollCount} for task ${taskId}`);
+            }
+            
+            // Give up after too many polls
+            if (pollCount > maxPolls) {
+                clearInterval(pollInterval);
+                showGenerationError('Task is taking too long. Please check server logs.');
+                document.getElementById('generate-voice-btn').disabled = false;
+                return;
+            }
+            
+            fetch(`/api/admin/tasks/${taskId}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ task_id: taskId })
+            })
+            .then(response => {
+                if (!response.ok) {
+                    clearInterval(pollInterval);
+                    throw new Error('Error fetching task status');
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (shouldLog) {
+                    console.log('Task status:', data);
+                }
+                
+                // Update device info if available
+                if (data.device_info) {
+                    const deviceInfoElement = document.querySelector('.device-info');
+                    deviceInfoElement.textContent = data.device_info;
+                    deviceInfoElement.style.display = 'block';
+                }
+                
+                // Update status message if available
+                if (data.message) {
+                    const statusMessageElement = document.querySelector('.status-message');
+                    statusMessageElement.textContent = data.message;
+                    statusMessageElement.style.display = 'block';
+                }
+                
+                switch (data.status) {
+                    case 'pending':
+                        showGenerationStatus('Task pending...', 25);
+                        break;
+                    case 'processing':
+                        showGenerationStatus(`Processing voice... ${data.progress ? Math.round(data.progress) + '%' : ''}`, data.progress || 50);
+                        break;
+                    case 'completed':
+                        clearInterval(pollInterval);
+                        showGenerationStatus('Voice generated successfully!', 100);
+                        showGenerationResult(data.result);
+                        document.getElementById('generate-voice-btn').disabled = false;
+                        break;
+                    case 'failed':
+                        clearInterval(pollInterval);
+                        showGenerationStatus('Voice generation failed', 100);
+                        showGenerationError(data.error || 'Failed to generate voice');
+                        document.getElementById('generate-voice-btn').disabled = false;
+                        break;
+                    default:
+                        showGenerationStatus(`Unknown status: ${data.status}`, 50);
+                }
+            })
+            .catch(error => {
+                console.error('Error polling task status:', error);
+                clearInterval(pollInterval);
+                showGenerationError(error.message);
+                document.getElementById('generate-voice-btn').disabled = false;
+            });
+        }, 5000); // Poll every 5 seconds
+    }
+    
+    function showGenerationStatus(message, progress = 0) {
+        const statusDiv = document.querySelector('.generation-status');
+        const progressBar = document.querySelector('.progress-bar');
+        const messageElement = document.querySelector('.generation-message');
+        
+        statusDiv.style.display = 'block';
+        progressBar.style.width = `${progress}%`;
+        progressBar.setAttribute('aria-valuenow', progress);
+        progressBar.textContent = `${progress}%`;
+        messageElement.textContent = message;
+        
+        document.querySelector('.generation-error').style.display = 'none';
+        document.querySelector('.generation-result').style.display = 'none';
+    }
+    
+    function showGenerationResult(result) {
+        if (!result || !result.file_url) {
+            showGenerationError('Voice generation completed but no audio file was returned');
+            return;
+        }
+        
+        const resultDiv = document.querySelector('.generation-result');
+        const audioPlayer = document.getElementById('audio-player');
+        const downloadLink = document.getElementById('download-link');
+        
+        // Set audio source - Use the file_url from the result
+        audioPlayer.src = result.file_url;
+        
+        // Set download link - Use the file_url and filename from the result
+        downloadLink.href = result.file_url;
+        
+        // Extract filename from URL for the download attribute
+        const filename = result.file_url.split('/').pop();
+        downloadLink.download = filename;
+        
+        // Show result container
+        resultDiv.style.display = 'block';
+        
+        // Hide status container
+        document.querySelector('.generation-status').style.display = 'none';
+        
+        // Log success for debugging
+        console.log("Audio generated successfully:", result);
+    }
+    
+    function showGenerationError(errorMessage) {
+        const errorDiv = document.querySelector('.generation-error');
+        const errorMessageElement = document.getElementById('error-message');
+        
+        errorDiv.style.display = 'block';
+        errorMessageElement.textContent = errorMessage;
+        
+        document.querySelector('.generation-status').style.display = 'none';
+        document.querySelector('.generation-result').style.display = 'none';
+        
+        // Log error for debugging
+        console.error("Voice generation error:", errorMessage);
+    }
+}
+
+// Initialize voice generation if we're on the voices page
+document.addEventListener('DOMContentLoaded', function() {
+    if (document.querySelector('.voice-generation-section')) {
+        initVoiceGeneration();
+    }
+}); 

@@ -284,3 +284,19 @@ EchoForge is designed for creative and legitimate use cases. Please use this tec
 
 - This project uses the [CSM model architecture](https://github.com/SesameAILabs/csm) from Sesame AI Labs for voice generation
 - Special thanks to the open-source community for their contributions to speech synthesis technology
+
+## Voice Generation Interface
+
+The EchoForge admin panel includes a simplified voice generation interface that allows you to:
+
+1. Enter text to be spoken
+2. Select a voice (Male, Female, or Child)
+3. Adjust temperature settings
+4. Generate and download audio files
+
+To access the voice generation interface:
+1. Navigate to `http://[server-address]:[port]/admin/voices`
+2. Log in with your admin credentials
+3. Use the form to generate voice samples
+
+The interface provides real-time feedback on generation status and device information during processing.

@@ -15,6 +15,8 @@ from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Body
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 import time
+import uuid
+import shutil
 
 from app.core import config
 from app.core.auth import verify_credentials
@@ -265,77 +267,89 @@ async def unload_model(
 
 
 @router.get("/tasks", response_model=List[TaskInfo])
-async def get_tasks(
-    limit: int = 10,
-    offset: int = 0,
-    status: Optional[str] = None,
-    username: str = Depends(verify_credentials)
-):
-    """Get task information."""
+async def get_tasks(username: str = Depends(verify_credentials)):
+    """Get all tasks."""
     logger.info(f"Getting tasks for user: {username}")
     
-    if not task_manager:
-        raise HTTPException(status_code=500, detail="Task manager not available")
-    
-    all_tasks = task_manager.get_all_tasks()
-    
-    # Filter by status if provided
-    if status:
-        filtered_tasks = {k: v for k, v in all_tasks.items() if v.get('status') == status}
-    else:
-        filtered_tasks = all_tasks
-    
-    # Sort by creation time (newest first)
-    sorted_tasks = sorted(
-        filtered_tasks.items(),
-        key=lambda x: x[1].get('created_at', 0),
-        reverse=True
-    )
-    
-    # Apply pagination
-    paginated_tasks = sorted_tasks[offset:offset + limit]
+    # Get all tasks from the task manager
+    tasks = task_manager.get_all_tasks()
     
     # Convert to TaskInfo objects
     task_infos = []
-    for task_id, task_data in paginated_tasks:
+    for task_id, task in tasks.items():
         task_infos.append(TaskInfo(
             task_id=task_id,
-            status=task_data.get('status', 'unknown'),
-            created_at=datetime.fromtimestamp(task_data.get('created_at', 0)),
-            completed_at=datetime.fromtimestamp(task_data.get('completed_at', 0)) if task_data.get('completed_at') else None,
-            progress=task_data.get('progress', 0.0),
-            text=task_data.get('text', ''),
-            speaker_id=task_data.get('speaker_id', 0),
-            parameters={
-                'temperature': task_data.get('temperature', 0.0),
-                'top_k': task_data.get('top_k', 0),
-                'style': task_data.get('style', ''),
-                'device': task_data.get('device', '')
-            }
+            status=task.status,
+            created_at=task.created_at,
+            completed_at=task.completed_at,
+            progress=task.progress,
+            text=task.text if hasattr(task, 'text') else "",
+            speaker_id=task.speaker_id if hasattr(task, 'speaker_id') else 1,
+            parameters=task.parameters if hasattr(task, 'parameters') else {}
         ))
+    
+    # Sort by created_at (newest first)
+    task_infos.sort(key=lambda x: x.created_at, reverse=True)
     
     return task_infos
 
 
-@router.delete("/tasks/{task_id}")
-async def cancel_task(
+@router.post("/tasks/{task_id}", response_model=dict)
+async def get_task_status(
     task_id: str,
     username: str = Depends(verify_credentials)
 ):
-    """Cancel a task."""
-    logger.info(f"Cancelling task {task_id} for user: {username}")
+    """Get task status by ID."""
+    logger.info(f"Getting task status for task {task_id} for user: {username}")
     
-    if not task_manager:
-        raise HTTPException(status_code=500, detail="Task manager not available")
-    
-    # Check if task exists
-    if not task_manager.task_exists(task_id):
+    # Get task from the task manager
+    task = task_manager.get_task(task_id)
+    if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     
-    # Cancel the task
-    task_manager.cancel_task(task_id)
+    # Return task status - handle both object and dictionary formats
+    if isinstance(task, dict):
+        return {
+            "task_id": task_id,
+            "status": task.get("status", "unknown"),
+            "progress": task.get("progress", 0),
+            "created_at": task.get("created_at"),
+            "updated_at": task.get("updated_at"),
+            "completed_at": task.get("completed_at"),
+            "result": task.get("result"),
+            "error": task.get("error"),
+            "device_info": task.get("device_info"),
+            "message": task.get("message")
+        }
+    else:
+        return {
+            "task_id": task_id,
+            "status": getattr(task, "status", "unknown"),
+            "progress": getattr(task, "progress", 0),
+            "created_at": getattr(task, "created_at", None),
+            "updated_at": getattr(task, "updated_at", None),
+            "completed_at": getattr(task, "completed_at", None),
+            "result": getattr(task, "result", None) if hasattr(task, "result") else None,
+            "error": getattr(task, "error", None) if hasattr(task, "error") else None,
+            "device_info": getattr(task, "device_info", None) if hasattr(task, "device_info") else None,
+            "message": getattr(task, "message", None) if hasattr(task, "message") else None
+        }
+
+
+@router.delete("/tasks/{task_id}")
+async def delete_task(
+    task_id: str,
+    username: str = Depends(verify_credentials)
+):
+    """Delete a task."""
+    logger.info(f"Deleting task {task_id} for user: {username}")
     
-    return {"status": "cancelled", "message": "Task cancelled successfully"}
+    # Delete task from the task manager
+    success = task_manager.delete_task(task_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    return {"status": "deleted"}
 
 
 @router.get("/config", response_model=List[ConfigSetting])
@@ -542,39 +556,26 @@ async def admin_generate_voice(
     temperature: float = Body(0.7, embed=True),
     top_k: int = Body(50, embed=True),
     style: str = Body("natural", embed=True),
-    device: str = Body("auto", embed=True)
+    device: str = Body("cuda", embed=True),
+    reload_model: bool = Body(False, embed=True)
 ):
-    """Generate voice from the admin interface."""
+    """Generate a voice using the admin API."""
     logger.info(f"Admin voice generation request from user: {username}")
     
-    if not voice_generator:
-        raise HTTPException(status_code=500, detail="Voice generator not available")
-    
     # Validate parameters
-    if not text or len(text) < 1:
-        raise HTTPException(status_code=400, detail="Text cannot be empty")
-    
-    if len(text) > 1000:
-        raise HTTPException(status_code=400, detail="Text exceeds maximum length (1000 characters)")
+    if not text:
+        raise HTTPException(status_code=400, detail="Text is required")
     
     if temperature < 0.1 or temperature > 1.0:
         raise HTTPException(status_code=400, detail="Temperature must be between 0.1 and 1.0")
     
     if top_k < 1 or top_k > 100:
-        raise HTTPException(status_code=400, detail="Top-k must be between 1 and 100")
+        raise HTTPException(status_code=400, detail="Top-K must be between 1 and 100")
     
-    if device not in ["auto", "cpu", "cuda"]:
-        logger.warning(f"Invalid device specified: {device}, falling back to 'auto'")
-        device = "auto"
-        
-    # Force CPU if requested
-    if device == "cpu":
-        logger.info("Using CPU as explicitly requested by user")
-    
-    # Register a task for this generation
+    # Register a task and get the task_id
     task_id = task_manager.register_task("admin_voice_generation")
     
-    # Launch background task for generation
+    # Start the generation in the background
     background_tasks.add_task(
         _generate_admin_voice,
         task_id=task_id,
@@ -583,90 +584,100 @@ async def admin_generate_voice(
         temperature=temperature,
         top_k=top_k,
         style=style,
-        device=device
+        device=device,
+        reload_model=reload_model
     )
     
-    return {
-        "task_id": task_id,
-        "status": "pending",
-        "message": "Voice generation has been started"
-    }
+    return {"task_id": task_id, "status": "started"}
 
 
-async def _generate_admin_voice(task_id: str, text: str, speaker_id: int, temperature: float, top_k: int, style: str, device: str):
-    """Background task for voice generation."""
+async def _generate_admin_voice(task_id: str, text: str, speaker_id: int, temperature: float, top_k: int, style: str, device: str, reload_model: bool = False):
+    """Generate a voice in the background."""
     logger.info(f"Starting admin voice generation for task {task_id}")
     
     try:
-        # Create an admin-specific output directory
-        admin_output_dir = os.path.join(config.OUTPUT_DIR, "admin")
-        os.makedirs(admin_output_dir, exist_ok=True)
+        # Update task status with device info
+        task_manager.update_task(
+            task_id, 
+            status="processing", 
+            progress=10,
+            device_info=f"Using device: {device}"
+        )
         
-        # Update task status
-        task_manager.update_task(task_id, status="processing")
+        # Generate the voice
+        if not voice_generator:
+            raise Exception("Voice generator not available")
         
-        # Generate voice
-        file_path, file_url = voice_generator.generate(
+        # Log GPU info if using CUDA
+        if device == "cuda" and torch.cuda.is_available():
+            gpu_name = torch.cuda.get_device_name(0)
+            free_memory = torch.cuda.get_device_properties(0).total_memory - torch.cuda.memory_allocated(0)
+            free_memory_gb = free_memory / (1024 ** 3)
+            logger.info(f"Using GPU: {gpu_name} with {free_memory_gb:.2f} GB free memory for task {task_id}")
+            
+            # Update task with GPU info
+            task_manager.update_task(
+                task_id,
+                status="processing",
+                progress=20,
+                device_info=f"Using GPU: {gpu_name} with {free_memory_gb:.2f} GB free memory"
+            )
+        
+        # Update progress before generation
+        task_manager.update_task(task_id, status="processing", progress=30, message="Starting voice synthesis")
+        
+        # Generate the voice
+        output_file = voice_generator.generate_voice(
             text=text,
             speaker_id=speaker_id,
             temperature=temperature,
             top_k=top_k,
             style=style,
-            device=device
+            device=device,
+            reload_model=reload_model
         )
         
-        if file_path:
-            # Voice generation successful
-            # Convert file_path to absolute path if it's not already
-            if not os.path.isabs(file_path):
-                file_path = os.path.abspath(file_path)
-                
-            # Ensure the file exists
-            if os.path.exists(file_path):
-                # Get the filename from the path
-                file_name = os.path.basename(file_path)
-                
-                # Copy file to admin directory for better organization
-                admin_file_path = os.path.join(admin_output_dir, file_name)
-                import shutil
-                shutil.copy2(file_path, admin_file_path)
-                logger.info(f"Copied voice file to admin directory: {admin_file_path}")
-                
-                # Update task with success
-                task_manager.update_task(
-                    task_id,
-                    status="completed",
-                    result={
-                        "file_path": admin_file_path,
-                        "file_url": f"/api/admin/voices/{file_name}",
-                        "text": text,
-                        "speaker_id": speaker_id
-                    }
-                )
-                logger.info(f"Admin voice generation completed for task {task_id}: {admin_file_path}")
-                return
-            else:
-                logger.error(f"Voice generation succeeded but file not found: {file_path}")
-                task_manager.update_task(
-                    task_id,
-                    status="failed",
-                    error=f"Voice generation succeeded but file not found: {file_path}"
-                )
-        else:
-            # Voice generation failed
-            logger.error(f"Voice generation failed for task {task_id}")
-            task_manager.update_task(
-                task_id,
-                status="failed",
-                error="Voice generation failed"
-            )
-    
+        # Update progress after generation
+        task_manager.update_task(task_id, status="processing", progress=70, message="Voice synthesis complete")
+        
+        if not output_file:
+            raise Exception("Voice generation failed")
+        
+        # Copy the file to the admin directory
+        admin_dir = os.path.join(config.OUTPUT_DIR, "admin")
+        os.makedirs(admin_dir, exist_ok=True)
+        
+        filename = os.path.basename(output_file)
+        admin_file = os.path.join(admin_dir, filename)
+        shutil.copy2(output_file, admin_file)
+        
+        logger.info(f"Copied voice file to admin directory: {admin_file}")
+        
+        # Update progress after file copy
+        task_manager.update_task(task_id, status="processing", progress=90, message="Finalizing audio file")
+        
+        # Create a URL for the file
+        file_url = f"/api/admin/voices/{filename}"
+        
+        # Update task status
+        task_manager.update_task(
+            task_id,
+            status="completed",
+            progress=100,
+            result={"file_url": file_url, "filename": filename}
+        )
+        
+        logger.info(f"Admin voice generation completed for task {task_id}: {admin_file}")
+        
     except Exception as e:
-        # Handle any exceptions
-        logger.exception(f"Error during admin voice generation for task {task_id}: {e}")
+        logger.error(f"Voice generation failed for task {task_id}")
+        logger.exception(e)
+        
+        # Update task status
         task_manager.update_task(
             task_id,
             status="failed",
+            progress=100,
             error=str(e)
         )
 

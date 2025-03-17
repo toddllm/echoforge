@@ -81,16 +81,20 @@ class TaskManager:
             logger.info("Registered new %s task with ID: %s", task_type, task_id)
             return task_id
     
-    def update_task(self, task_id: str, status: str = None, 
-                   result: Dict[str, Any] = None, error: str = None) -> bool:
+    def update_task(self, task_id: str, status: str = None, progress: float = None,
+                   result: Dict[str, Any] = None, error: str = None, 
+                   device_info: str = None, message: str = None) -> bool:
         """
         Update a task's status, result, or error message.
         
         Args:
             task_id: The unique ID of the task
             status: New status value (pending, processing, completed, error)
+            progress: Task progress percentage (0-100)
             result: Task result data (for completed tasks)
             error: Error message (for failed tasks)
+            device_info: Information about the device being used
+            message: Additional status message
             
         Returns:
             True if the task was updated, False if the task wasn't found
@@ -100,22 +104,30 @@ class TaskManager:
                 logger.warning("Attempted to update non-existent task: %s", task_id)
                 return False
             
-            # Update the task data
-            task = self.tasks[task_id]
+            # Update the task record
+            if status is not None:
+                self.tasks[task_id]["status"] = status
             
-            if status:
-                task["status"] = status
+            if progress is not None:
+                self.tasks[task_id]["progress"] = progress
             
             if result is not None:
-                task["result"] = result
+                self.tasks[task_id]["result"] = result
             
             if error is not None:
-                task["error"] = error
+                self.tasks[task_id]["error"] = error
+            
+            if device_info is not None:
+                self.tasks[task_id]["device_info"] = device_info
+            
+            if message is not None:
+                self.tasks[task_id]["message"] = message
             
             # Update the timestamp
-            task["updated_at"] = time.time()
+            self.tasks[task_id]["updated_at"] = time.time()
             
-            logger.debug("Updated task %s status to %s", task_id, status or task["status"])
+            logger.debug("Updated task %s: status=%s, progress=%s", 
+                        task_id, status, progress)
             return True
     
     def get_task(self, task_id: str) -> Optional[TaskData]:
