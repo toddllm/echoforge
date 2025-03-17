@@ -101,6 +101,25 @@ def parse_arguments():
         help=f"Serve on {config.PUBLIC_HOST} to make the app publicly accessible"
     )
     
+    # Direct CSM arguments
+    parser.add_argument(
+        "--direct-csm", 
+        action="store_true",
+        help="Enable Direct CSM implementation (default: enabled)"
+    )
+    
+    parser.add_argument(
+        "--no-direct-csm", 
+        action="store_false",
+        dest="direct_csm",
+        help="Disable Direct CSM implementation"
+    )
+    
+    parser.add_argument(
+        "--direct-csm-path",
+        help=f"Path to Direct CSM implementation (default: {config.DIRECT_CSM_PATH})"
+    )
+    
     # Auth arguments - support both styles for compatibility
     parser.add_argument(
         "--auth", 
@@ -157,6 +176,15 @@ def main():
     
     if args.password or args.auth_pass:
         os.environ["AUTH_PASSWORD"] = args.auth_pass or args.password
+    
+    # Direct CSM settings
+    if hasattr(args, 'direct_csm'):
+        os.environ["USE_DIRECT_CSM"] = str(args.direct_csm).lower()
+        logger.info(f"Direct CSM is {'enabled' if args.direct_csm else 'disabled'}")
+    
+    if args.direct_csm_path:
+        os.environ["DIRECT_CSM_PATH"] = args.direct_csm_path
+        logger.info(f"Using Direct CSM path: {args.direct_csm_path}")
     
     # Set appropriate environment variables based on arguments
     if public_serving:

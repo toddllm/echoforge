@@ -69,6 +69,26 @@ async def startup_event():
     voices_dir.mkdir(parents=True, exist_ok=True)
     
     logger.info(f"Initialized data directories: {data_dir}")
+    
+    # Initialize voice generator with Direct CSM
+    from app.api.voice_generator import voice_generator
+    try:
+        # Get device from environment or use auto
+        device = os.environ.get("ECHOFORGE_DEVICE", "auto")
+        logger.info(f"Initializing voice generator with device: {device}")
+        
+        # Initialize the voice generator
+        voice_generator.initialize(device=device)
+        
+        # Log whether we're using Direct CSM
+        if voice_generator.direct_csm is not None:
+            logger.info("Voice generator initialized with Direct CSM")
+        elif voice_generator.model is not None:
+            logger.info("Voice generator initialized with standard CSM model")
+        else:
+            logger.warning("Voice generator initialized but no model is loaded")
+    except Exception as e:
+        logger.error(f"Failed to initialize voice generator: {e}")
 
 
 def parse_args():
@@ -99,6 +119,18 @@ def parse_args():
         help="Device to use for TTS (auto, cuda, cpu)"
     )
     parser.add_argument(
+        "--direct-csm", 
+        action="store_true", 
+        default=True,
+        help="Use Direct CSM implementation (default: True)"
+    )
+    parser.add_argument(
+        "--no-direct-csm", 
+        action="store_false", 
+        dest="direct_csm",
+        help="Disable Direct CSM implementation"
+    )
+    parser.add_argument(
         "--debug", 
         action="store_true", 
         help="Enable debug mode"
@@ -115,13 +147,16 @@ if __name__ == "__main__":
         os.environ["ECHOFORGE_MODEL_PATH"] = args.model_path
     os.environ["ECHOFORGE_DEVICE"] = args.device
     
+    # Set Direct CSM environment variable
+    os.environ["USE_DIRECT_CSM"] = str(args.direct_csm).lower()
+    
     # Configure logging level based on debug mode
     if args.debug:
         logging.getLogger().setLevel(logging.DEBUG)
         logger.debug("Debug mode enabled")
     
     # Start the server
-    logger.info(f"Starting server on {args.host}:{args.port}")
+    logger.info(f"Starting server on {args.host}:{args.port} with Direct CSM {'enabled' if args.direct_csm else 'disabled'}")
     uvicorn.run(
         "main:app",
         host=args.host,
