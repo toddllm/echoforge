@@ -36,20 +36,20 @@ AUTH_PASSWORD = os.environ.get("AUTH_PASSWORD", "changeme123")
 AUTH_REQUIRED_FOR_PUBLIC = os.environ.get("AUTH_REQUIRED_FOR_PUBLIC", "true").lower() == "true"
 
 # Model settings
-MODEL_PATH = os.environ.get("MODEL_PATH", "/path/to/model/checkpoint")
+MODEL_PATH = "/home/tdeshane/.cache/huggingface/hub/models--sesame--csm-1b/snapshots/03ab46ff5cfdcc783cc76fcf9ea6fd0838503093/ckpt.pt"
 
 # Output settings
 OUTPUT_DIR = os.environ.get("OUTPUT_DIR", "/tmp/echoforge/voices")
 
 # Voice generation settings
-DEFAULT_TEMPERATURE = float(os.environ.get("DEFAULT_TEMPERATURE", "0.5"))
-DEFAULT_TOP_K = int(os.environ.get("DEFAULT_TOP_K", "80"))
+DEFAULT_TEMPERATURE = float(os.environ.get("DEFAULT_TEMPERATURE", "0.7"))
+DEFAULT_TOP_K = int(os.environ.get("DEFAULT_TOP_K", "50"))
 DEFAULT_SPEAKER_ID = int(os.environ.get("DEFAULT_SPEAKER_ID", "1"))
-DEFAULT_STYLE = os.environ.get("DEFAULT_STYLE", "short")
-DEFAULT_DEVICE = os.environ.get("DEFAULT_DEVICE", "cpu")
+DEFAULT_STYLE = os.environ.get("DEFAULT_STYLE", "default")
+DEFAULT_DEVICE = os.environ.get("DEFAULT_DEVICE", "auto")
 
 # Task management
-MAX_TASKS = int(os.environ.get("MAX_TASKS", "1000"))
+MAX_TASKS = int(os.environ.get("MAX_TASKS", "10"))
 TASK_CLEANUP_KEEP_NEWEST = int(os.environ.get("TASK_CLEANUP_KEEP_NEWEST", "500"))
 VOICE_FILE_MAX_AGE_HOURS = int(os.environ.get("VOICE_FILE_MAX_AGE_HOURS", "24"))
 
@@ -59,5 +59,14 @@ API_TAGS = ["voice"]
 
 # Application info
 APP_NAME = "EchoForge"
-APP_DESCRIPTION = "Generate character voices with deep learning"
-APP_VERSION = "0.1.0" 
+APP_DESCRIPTION = "Voice generation and management for creative projects"
+APP_VERSION = "0.1.0"
+
+# Server settings
+HOST = os.environ.get("ECHOFORGE_HOST", "0.0.0.0")
+PORT = int(os.environ.get("ECHOFORGE_PORT", 8765))
+RELOAD = os.environ.get("ECHOFORGE_RELOAD", "false").lower() == "true"
+DEBUG = os.environ.get("ECHOFORGE_DEBUG", "false").lower() == "true"
+
+# Task manager settings
+TASK_TIMEOUT = int(os.environ.get("ECHOFORGE_TASK_TIMEOUT", 3600))  # 1 hour 

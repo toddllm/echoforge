@@ -16,6 +16,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import router as api_router
+from app.api.voice_browser import router as voice_browser_router
 from app.ui.routes import router as ui_router
 from app.core.voice_generator import VoiceGenerator
 
@@ -53,6 +54,7 @@ app.mount(
 # Include routers
 app.include_router(api_router)
 app.include_router(ui_router)
+app.include_router(voice_browser_router)
 
 
 @app.on_event("startup")

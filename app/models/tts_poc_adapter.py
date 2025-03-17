@@ -28,6 +28,14 @@ MOVIE_MAKER_PATH = "/home/tdeshane/movie_maker"
 VOICE_POC_PATH = os.path.join(MOVIE_MAKER_PATH, "voice_poc")
 VOICE_GENERATOR_SCRIPT = os.path.join(VOICE_POC_PATH, "run_voice_generator.sh")
 
+# Standardized directory structure
+ECHOFORGE_ROOT = "/tmp/echoforge"
+VOICES_DIR = os.path.join(ECHOFORGE_ROOT, "voices")
+GENERATED_DIR = os.path.join(VOICES_DIR, "generated")
+TEMP_DIR = os.path.join(VOICES_DIR, "temp")
+CACHE_DIR = os.path.join(VOICES_DIR, "cache")
+LOGS_DIR = os.path.join(VOICES_DIR, "logs")
+
 class TTSPOCAdapter:
     """
     Adapter for the TTS POC implementation.
@@ -47,11 +55,33 @@ class TTSPOCAdapter:
         # Create EchoForge-specific paths
         self.echoforge_output_dir = os.path.join(output_dir, "generated")
         self.temp_output_dir = os.path.join(output_dir, "temp")
+        self.cache_dir = os.path.join(output_dir, "cache")
+        self.logs_dir = os.path.join(output_dir, "logs")
         
-        # Ensure output directories exist
-        os.makedirs(self.output_dir, exist_ok=True)
-        os.makedirs(self.echoforge_output_dir, exist_ok=True)
-        os.makedirs(self.temp_output_dir, exist_ok=True)
+        # Ensure all output directories exist
+        for directory in [self.output_dir, self.echoforge_output_dir, self.temp_output_dir, 
+                          self.cache_dir, self.logs_dir]:
+            try:
+                os.makedirs(directory, exist_ok=True)
+                if not os.path.exists(directory):
+                    logger.error(f"Failed to create directory {directory}")
+                elif not os.access(directory, os.W_OK):
+                    logger.error(f"Directory {directory} is not writable")
+                else:
+                    logger.info(f"Directory verified: {directory}")
+            except Exception as e:
+                logger.error(f"Error creating directory {directory}: {e}")
+        
+        # Create symlinks for compatibility with other systems
+        try:
+            # Create symlink from TTS POC expected output to our temp directory
+            tts_poc_output = os.path.join(VOICE_POC_PATH, "output")
+            if not os.path.exists(tts_poc_output):
+                os.makedirs(os.path.dirname(tts_poc_output), exist_ok=True)
+                os.symlink(self.temp_output_dir, tts_poc_output)
+                logger.info(f"Created symlink from {tts_poc_output} to {self.temp_output_dir}")
+        except Exception as e:
+            logger.warning(f"Could not create symlink: {e}")
         
         # Try to validate the adapter setup
         if os.path.exists(TTS_POC_PATH):
@@ -94,6 +124,11 @@ class TTSPOCAdapter:
             logger.error("TTS POC adapter not available")
             return None, 0
         
+        # Validate device parameter - convert 'auto' to 'cuda' if available
+        if device == "auto":
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+            logger.info(f"Auto device selection chose: {device}")
+        
         # Choose the appropriate generation method
         if os.path.exists(VOICE_GENERATOR_SCRIPT):
             return self._generate_with_voice_script(text, speaker_id, temperature, top_k, device)
@@ -119,13 +154,32 @@ class TTSPOCAdapter:
         Returns:
             Tuple containing the audio tensor and sample rate, or (None, 0) if failed
         """
-        logger.info(f"Generating speech for text: '{text}'")
+        logger.info(f"Generating speech for text: '{text}' using device: {device}")
+        
+        # Validate device parameter
+        if device not in ["cuda", "cpu"]:
+            logger.warning(f"Invalid device '{device}', falling back to CPU")
+            device = "cpu"
+        
+        # Check CUDA availability if requested
+        if device == "cuda" and not torch.cuda.is_available():
+            logger.warning("CUDA requested but not available, falling back to CPU")
+            device = "cpu"
         
         # Create a unique identifier for this request
         timestamp = int(time.time())
         import random
         unique_id = f"{timestamp}_{random.randint(10000, 99999)}"
         expected_output = os.path.join(self.temp_output_dir, f"echoforge_voice_{unique_id}.wav")
+        
+        # Ensure the temp directory exists and is writable
+        if not os.path.exists(self.temp_output_dir):
+            try:
+                os.makedirs(self.temp_output_dir, exist_ok=True)
+                logger.info(f"Created temp directory: {self.temp_output_dir}")
+            except Exception as e:
+                logger.error(f"Failed to create temp directory: {e}")
+                return None, 0
         
         # Use tempfile to create a temporary direct script that we control
         temp_script = None
@@ -140,6 +194,10 @@ import logging
 import json
 import tempfile
 import subprocess
+import glob
+import shutil
+import time
+import traceback
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -149,6 +207,28 @@ logger = logging.getLogger("echoforge_direct_tts")
 VOICE_GENERATOR = "{VOICE_GENERATOR_SCRIPT}"
 OUTPUT_DIR = "{self.temp_output_dir}"
 OUTPUT_FILE = "{expected_output}"
+
+# Check CUDA availability if requested
+if "{device}" == "cuda":
+    if not torch.cuda.is_available():
+        logger.error("CUDA requested but not available")
+        sys.exit(1)
+    else:
+        # Print CUDA device info
+        device_name = torch.cuda.get_device_name(0)
+        device_cap = torch.cuda.get_device_capability(0)
+        logger.info(f"Using CUDA device: {{device_name}} with capability {{device_cap}}")
+        
+        # Check CUDA memory
+        total_mem = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+        free_mem = torch.cuda.memory_reserved(0) / (1024**3)
+        logger.info(f"CUDA memory: {{total_mem:.2f}} GB total, {{free_mem:.2f}} GB reserved")
+
+# Ensure output directory exists
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+if not os.path.exists(OUTPUT_DIR):
+    logger.error(f"Failed to create output directory: {{OUTPUT_DIR}}")
+    sys.exit(1)
 
 # Create a simple JSON file with our text
 temp_json = None
@@ -183,31 +263,63 @@ try:
         logger.error(f"Command failed with code {{process.returncode}}")
         logger.error(f"STDOUT: {{stdout}}")
         logger.error(f"STDERR: {{stderr}}")
+        
+        # Check for CUDA out of memory error
+        if "CUDA out of memory" in stderr:
+            logger.error("CUDA out of memory error detected")
+            print("CUDA_OOM_ERROR")
+        
         sys.exit(1)
     
     # Look for the output file - scenes are usually named scene_1.wav
     scene_file = os.path.join(OUTPUT_DIR, "scene_1.wav")
     if os.path.exists(scene_file):
         # Copy to our expected output path
-        import shutil
         shutil.copy2(scene_file, OUTPUT_FILE)
         logger.info(f"Copied scene file to: {{OUTPUT_FILE}}")
         print(f"OUTPUT_FILE: {{OUTPUT_FILE}}")
         sys.exit(0)
     else:
         # Check for other possible filenames
-        import glob
         possible_files = glob.glob(os.path.join(OUTPUT_DIR, "*.wav"))
-        for file in possible_files:
-            file_mtime = os.path.getmtime(file)
-            if abs(file_mtime - os.path.getmtime(temp_json)) < 60:  # Files created within a minute
-                shutil.copy2(file, OUTPUT_FILE)
-                logger.info(f"Copied alternate file {{file}} to: {{OUTPUT_FILE}}")
-                print(f"OUTPUT_FILE: {{OUTPUT_FILE}}")
-                sys.exit(0)
+        
+        # If no files found in output dir, check the voice_poc directory
+        if not possible_files:
+            voice_poc_output = os.path.join("{VOICE_POC_PATH}", "output")
+            possible_files = glob.glob(os.path.join(voice_poc_output, "*.wav"))
+            logger.info(f"Checking voice_poc output directory: {{voice_poc_output}}")
+        
+        # If still no files, check the current directory
+        if not possible_files:
+            possible_files = glob.glob("*.wav")
+            logger.info("Checking current directory for WAV files")
+        
+        # If we found any files, use the most recent one
+        if possible_files:
+            # Sort by modification time (newest first)
+            possible_files.sort(key=os.path.getmtime, reverse=True)
+            newest_file = possible_files[0]
+            logger.info(f"Found newest WAV file: {{newest_file}}")
+            
+            # Copy to our expected output
+            shutil.copy2(newest_file, OUTPUT_FILE)
+            logger.info(f"Copied newest file to: {{OUTPUT_FILE}}")
+            print(f"OUTPUT_FILE: {{OUTPUT_FILE}}")
+            sys.exit(0)
         
         logger.error("Could not find generated file")
+        
+        # List all directories to help debug
+        logger.error(f"Contents of OUTPUT_DIR: {{os.listdir(OUTPUT_DIR) if os.path.exists(OUTPUT_DIR) else 'directory not found'}}")
+        voice_poc_output = os.path.join("{VOICE_POC_PATH}", "output")
+        logger.error(f"Contents of voice_poc output: {{os.listdir(voice_poc_output) if os.path.exists(voice_poc_output) else 'directory not found'}}")
+        logger.error(f"Contents of current dir: {{os.listdir('.')}}")
+        
         sys.exit(1)
+except Exception as e:
+    logger.error(f"Unhandled exception: {{e}}")
+    logger.error(traceback.format_exc())
+    sys.exit(1)
 finally:
     # Clean up
     if temp_json and os.path.exists(temp_json):
@@ -231,6 +343,13 @@ finally:
             # Wait for the process to complete
             stdout, stderr = process.communicate()
             
+            # Check for CUDA OOM error
+            if "CUDA_OOM_ERROR" in stdout:
+                logger.warning("CUDA out of memory error detected, falling back to CPU")
+                if device == "cuda":
+                    logger.info("Retrying with CPU")
+                    return self._generate_with_voice_script(text, speaker_id, temperature, top_k, "cpu")
+            
             # Check the return code
             if process.returncode != 0:
                 logger.error(f"Voice generation failed with return code: {process.returncode}")
@@ -238,8 +357,8 @@ finally:
                 logger.error(f"STDERR: {stderr}")
                 
                 # Fall back to CPU if we got CUDA out of memory error
-                if device == "cuda" and "CUDA out of memory" in stderr:
-                    logger.warning("CUDA out of memory error detected, falling back to CPU")
+                if device == "cuda" and ("CUDA out of memory" in stderr or "CUDA error" in stderr):
+                    logger.warning("CUDA error detected, falling back to CPU")
                     return self._generate_with_voice_script(text, speaker_id, temperature, top_k, "cpu")
                 
                 return None, 0
@@ -269,14 +388,24 @@ finally:
                 newest_file = None
                 newest_time = 0
                 
-                for directory in [self.temp_output_dir, VOICE_POC_PATH]:
+                # Search in multiple directories
+                search_dirs = [
+                    self.temp_output_dir,
+                    self.echoforge_output_dir,
+                    VOICE_POC_PATH,
+                    os.path.join(VOICE_POC_PATH, "output"),
+                    os.getcwd()
+                ]
+                
+                for directory in search_dirs:
                     if os.path.exists(directory):
+                        logger.info(f"Searching for WAV files in: {directory}")
                         for filename in os.listdir(directory):
                             if filename.endswith('.wav'):
                                 file_path = os.path.join(directory, filename)
                                 file_mtime = os.path.getmtime(file_path)
                                 time_diff = current_time - file_mtime
-                                if time_diff < 30 and file_mtime > newest_time:
+                                if time_diff < 60 and file_mtime > newest_time:  # Increased to 60 seconds
                                     newest_time = file_mtime
                                     newest_file = file_path
                 
@@ -286,6 +415,13 @@ finally:
             
             if not output_path or not os.path.exists(output_path):
                 logger.error("Output file not found after generation")
+                
+                # List contents of directories to help debug
+                for directory in [self.temp_output_dir, self.echoforge_output_dir, 
+                                 os.path.join(VOICE_POC_PATH, "output")]:
+                    if os.path.exists(directory):
+                        logger.error(f"Contents of {directory}: {os.listdir(directory)}")
+                
                 return None, 0
             
             # Load the audio file
@@ -298,15 +434,23 @@ finally:
                 torchaudio.save(final_output, audio, sample_rate)
                 logger.info(f"Saved final output to: {final_output}")
                 
-                # Return the audio tensor and sample rate
-                return audio.squeeze(), sample_rate
+                # Create a symlink in the cache directory
+                cache_link = os.path.join(self.cache_dir, f"latest_{unique_id}.wav")
+                try:
+                    if os.path.exists(cache_link):
+                        os.remove(cache_link)
+                    os.symlink(final_output, cache_link)
+                    logger.info(f"Created symlink at {cache_link}")
+                except Exception as e:
+                    logger.warning(f"Could not create symlink: {e}")
                 
+                return audio, sample_rate
             except Exception as e:
                 logger.error(f"Error loading audio file: {e}")
                 return None, 0
-            
+        
         except Exception as e:
-            logger.exception(f"Error generating speech: {e}")
+            logger.error(f"Error in voice generation: {e}")
             return None, 0
         
         finally:
@@ -314,8 +458,8 @@ finally:
             if temp_script and os.path.exists(temp_script):
                 try:
                     os.unlink(temp_script)
-                except Exception as e:
-                    logger.warning(f"Error removing temporary script: {e}")
+                except:
+                    pass
     
     def _generate_with_web_api(self, text: str, speaker_id: int, temperature: float, 
                              top_k: int, device: str) -> Tuple[Optional[torch.Tensor], int]:

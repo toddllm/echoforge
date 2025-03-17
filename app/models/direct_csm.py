@@ -126,14 +126,35 @@ class DirectCSM:
         # Try the default location
         default_path = os.path.join(CSM_PATH, "ckpt.pt")
         if os.path.exists(default_path):
+            logger.info(f"Found model checkpoint at default path: {default_path}")
             return default_path
         
-        # Try the Hugging Face cache
+        # Try the specific Hugging Face cache path for CSM-1B
+        specific_hf_path = os.path.expanduser("~/.cache/huggingface/hub/models--sesame--csm-1b")
+        if os.path.exists(specific_hf_path):
+            logger.info(f"Found Hugging Face cache for CSM-1B at: {specific_hf_path}")
+            
+            # Look for the most recent snapshot
+            snapshots_dir = os.path.join(specific_hf_path, "snapshots")
+            if os.path.exists(snapshots_dir):
+                snapshots = sorted([d for d in os.listdir(snapshots_dir) if os.path.isdir(os.path.join(snapshots_dir, d))])
+                if snapshots:
+                    latest_snapshot = snapshots[-1]
+                    checkpoint_path = os.path.join(snapshots_dir, latest_snapshot, "ckpt.pt")
+                    if os.path.exists(checkpoint_path):
+                        logger.info(f"Found checkpoint in latest snapshot: {checkpoint_path}")
+                        return checkpoint_path
+        
+        # Try the general Hugging Face cache
         hf_cache = os.path.expanduser("~/.cache/huggingface/hub")
         for root, dirs, files in os.walk(hf_cache):
             if "ckpt.pt" in files:
-                return os.path.join(root, "ckpt.pt")
+                checkpoint_path = os.path.join(root, "ckpt.pt")
+                logger.info(f"Found checkpoint in Hugging Face cache: {checkpoint_path}")
+                return checkpoint_path
         
+        # If we get here, we couldn't find the checkpoint
+        logger.error("Could not find CSM model checkpoint in any location")
         raise DirectCSMNotFoundError("Could not find CSM model checkpoint")
     
     def generate_speech(

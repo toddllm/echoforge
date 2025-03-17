@@ -333,17 +333,6 @@ class CSMModel:
             logger.warning("CSM model not initialized, initializing now")
             self.initialize()
         
-        # Override device if explicitly requested
-        if device and device != self.device:
-            logger.info(f"Device override requested: {device}, current device: {self.device}")
-            original_device = self.device
-            self.device = device
-            
-            # Check if we need to reinitialize the model
-            if hasattr(self, 'generator') and hasattr(self.generator, 'device'):
-                logger.info(f"Switching to requested device: {device}")
-                self.generator.device = device
-        
         # Provide default values if not specified
         if temperature is None:
             temperature = 0.7
@@ -351,84 +340,122 @@ class CSMModel:
             top_k = 50
         if max_audio_length_ms is None:
             max_audio_length_ms = 90000  # 90 seconds
+            
+        # Validate and normalize device parameter
+        if device is None or device == "auto":
+            # Auto-detect the best available device
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+            logger.info(f"Auto device selection chose: {device}")
         
         # Flag to track if we've tried the TTS POC adapter
         tried_tts_poc = False
+        tried_cuda = False
+        tried_cpu = False
         
+        # First try with TTS POC adapter on requested device
         if hasattr(self, 'tts_poc_adapter') and self.tts_poc_adapter.available:
-            # Use the TTS POC adapter
             tried_tts_poc = True
-            logger.info(f"Generating speech for text: '{text}' with speaker_id={speaker_id}, "
-                      f"temperature={temperature}, top_k={top_k}, device={device} using TTS POC adapter")
             
-            audio, sample_rate = self.tts_poc_adapter.generate_speech(
-                text=text,
-                speaker_id=speaker_id,
-                temperature=temperature,
-                top_k=top_k,
-                device=device if device else "auto"
-            )
+            # First try with the requested device
+            if device == "cuda":
+                tried_cuda = True
+                logger.info(f"Generating speech with TTS POC adapter on CUDA for text: '{text}'")
+                
+                try:
+                    audio, sample_rate = self.tts_poc_adapter.generate_speech(
+                        text=text,
+                        speaker_id=speaker_id,
+                        temperature=temperature,
+                        top_k=top_k,
+                        device="cuda"
+                    )
+                    
+                    if audio is not None:
+                        logger.info(f"Successfully generated audio with TTS POC adapter on CUDA")
+                        return audio, sample_rate
+                    else:
+                        logger.warning("TTS POC adapter on CUDA returned None, falling back to CPU")
+                except Exception as e:
+                    logger.warning(f"TTS POC adapter failed on CUDA: {e}, falling back to CPU")
             
-            if audio is not None:
-                logger.info(f"Generated audio with shape {audio.shape}")
-                return audio, sample_rate
-            else:
-                logger.warning("TTS POC adapter failed to generate speech, falling back to basic implementation")
-                # Make sure the basic implementation is initialized
-                if not hasattr(self, 'generator') or self.generator is None:
-                    logger.info("Initializing basic TTS implementation for fallback")
-                    self._initialize_basic_tts()
+            # If CUDA failed or wasn't requested, try CPU
+            if not tried_cpu and (device == "cpu" or audio is None):
+                tried_cpu = True
+                logger.info(f"Generating speech with TTS POC adapter on CPU for text: '{text}'")
+                
+                try:
+                    audio, sample_rate = self.tts_poc_adapter.generate_speech(
+                        text=text,
+                        speaker_id=speaker_id,
+                        temperature=temperature,
+                        top_k=top_k,
+                        device="cpu"
+                    )
+                    
+                    if audio is not None:
+                        logger.info(f"Successfully generated audio with TTS POC adapter on CPU")
+                        return audio, sample_rate
+                    else:
+                        logger.warning("TTS POC adapter on CPU returned None, falling back to basic implementation")
+                except Exception as e:
+                    logger.warning(f"TTS POC adapter failed on CPU: {e}, falling back to basic implementation")
         
-        # Use the basic implementation (either as primary or fallback)
+        # If we get here, TTS POC adapter failed or isn't available
+        # Use the basic implementation as fallback
         try:
             # Check if we have a generator, if not initialize it
             if not hasattr(self, 'generator') or self.generator is None:
                 logger.info("Initializing basic TTS implementation")
                 self._initialize_basic_tts()
             
-            logger.info(f"Generating speech for text: '{text}' with speaker_id={speaker_id}, "
-                      f"temperature={temperature}, top_k={top_k}, device={device or self.device} using basic TTS")
-            
-            # Generate the speech
-            audio = self.generator.generate(
-                text=text,
-                speaker=speaker_id,
-                temperature=temperature,
-                topk=top_k,
-                max_audio_length_ms=max_audio_length_ms
-            )
-            
-            logger.info(f"Generated audio with shape {audio.shape if hasattr(audio, 'shape') else 'unknown'}")
-            
-            # Return the audio and sample rate
-            sample_rate = getattr(self.generator, 'sample_rate', 24000)
-            return audio, sample_rate
-            
-        except Exception as e:
-            logger.error(f"Error generating speech: {e}")
-            
-            # If we already tried TTS POC and we're also failing with the basic implementation,
-            # there's nothing else to try
-            if tried_tts_poc:
-                raise CSMModelError(f"Both TTS POC adapter and basic implementation failed to generate speech: {e}")
+            # Try with the requested device first
+            if device == "cuda" and not tried_cuda:
+                tried_cuda = True
+                logger.info(f"Generating speech with basic TTS on CUDA for text: '{text}'")
                 
-            # If we haven't tried TTS POC yet but it's available, try it as a last resort
-            if hasattr(self, 'tts_poc_adapter') and self.tts_poc_adapter.available and not tried_tts_poc:
-                logger.info("Basic implementation failed, trying TTS POC adapter as fallback")
-                audio, sample_rate = self.tts_poc_adapter.generate_speech(
+                try:
+                    # Set the device for the generator
+                    self.generator.device = "cuda"
+                    
+                    # Generate the speech
+                    audio = self.generator.generate(
+                        text=text,
+                        speaker=speaker_id,
+                        temperature=temperature,
+                        topk=top_k,
+                        max_audio_length_ms=max_audio_length_ms
+                    )
+                    
+                    logger.info(f"Successfully generated audio with basic TTS on CUDA")
+                    sample_rate = getattr(self.generator, 'sample_rate', 24000)
+                    return audio, sample_rate
+                except Exception as e:
+                    logger.warning(f"Basic TTS failed on CUDA: {e}, falling back to CPU")
+            
+            # If CUDA failed or wasn't requested, try CPU
+            if not tried_cpu:
+                tried_cpu = True
+                logger.info(f"Generating speech with basic TTS on CPU for text: '{text}'")
+                
+                # Set the device for the generator
+                self.generator.device = "cpu"
+                
+                # Generate the speech
+                audio = self.generator.generate(
                     text=text,
-                    speaker_id=speaker_id,
+                    speaker=speaker_id,
                     temperature=temperature,
-                    top_k=top_k,
-                    device="cpu"  # Force CPU for reliability
+                    topk=top_k,
+                    max_audio_length_ms=max_audio_length_ms
                 )
                 
-                if audio is not None:
-                    logger.info(f"Successfully generated audio with TTS POC adapter fallback")
-                    return audio, sample_rate
+                logger.info(f"Successfully generated audio with basic TTS on CPU")
+                sample_rate = getattr(self.generator, 'sample_rate', 24000)
+                return audio, sample_rate
             
-            # If we get here, all generation attempts have failed
-            raise CSMModelError(f"Could not generate speech: {e}")
+        except Exception as e:
+            logger.error(f"Error generating speech with all methods: {e}")
+            raise CSMModelError(f"All speech generation methods failed: {e}")
     
     def save_audio(self, audio: torch.Tensor, sample_rate: int, output_path: str) -> str:
         """

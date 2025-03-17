@@ -27,6 +27,17 @@ Key features of the CSM model:
 
 EchoForge wraps this technology in a user-friendly web interface and API, making it accessible for various applications.
 
+### Direct CSM Implementation
+
+EchoForge includes a direct CSM implementation that bypasses adapter layers and directly uses the CSM model. This approach offers several advantages:
+
+- **Improved Performance**: Direct access to the model reduces overhead
+- **Better Audio Quality**: Fewer transformations lead to clearer voice output
+- **Simplified Architecture**: Reduces complexity in the voice generation pipeline
+- **Fallback Mechanisms**: Automatic fallback to CPU if CUDA fails
+
+For more details, see the [Direct CSM documentation](docs/DIRECT_CSM.md).
+
 ## Installation
 
 ### Prerequisites
@@ -201,9 +212,12 @@ Returns the status of a voice generation task.
 - `app/` - Application code
   - `api/` - API endpoints and voice generation
   - `core/` - Core functionality and configuration
+  - `models/` - Model implementations including Direct CSM
 - `static/` - Static assets (CSS, JavaScript, images)
 - `templates/` - HTML templates
 - `tests/` - Test suite
+- `scripts/` - Utility scripts for testing and development
+- `docs/` - Documentation
 
 ## Roadmap
 
@@ -211,11 +225,11 @@ Here are our development milestones for EchoForge:
 
 ### Milestone 1: Enhanced Voice Generation
 
+- [x] Direct CSM implementation for improved voice quality
 - [ ] Voice fine-tuning interface for creating custom character voices
 - [ ] Batch processing for generating multiple voice clips at once
 - [ ] Improved voice style controls (emotion, pace, emphasis)
 - [ ] Enhanced audio playback controls (speed, pitch adjustment)
-- [ ] Voice preset library with shareable configurations
 
 ### Milestone 2: User Experience & Management
 
@@ -240,14 +254,6 @@ Here are our development milestones for EchoForge:
 - [ ] API marketplace for voice models and styles
 - [ ] Plugin system for extending functionality
 - [ ] Integration with virtual production pipelines
-
-### Future Vision
-
-- [ ] Real-time voice generation for interactive applications
-- [ ] Multi-language support with accent preservation
-- [ ] Collaborative voice project editing
-- [ ] Voice-driven character animation
-- [ ] Emotional response modeling for dynamic conversations
 
 ## Contributing
 
@@ -278,4 +284,3 @@ EchoForge is designed for creative and legitimate use cases. Please use this tec
 
 - This project uses the [CSM model architecture](https://github.com/SesameAILabs/csm) from Sesame AI Labs for voice generation
 - Special thanks to the open-source community for their contributions to speech synthesis technology
-
