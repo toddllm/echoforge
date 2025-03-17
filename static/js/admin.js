@@ -365,10 +365,174 @@ function initModelManagement() {
                 // This would fetch model details from an API
                 // Mock implementation for now
                 document.getElementById('model-detail-name').textContent = `Model ${modelId}`;
+                
+                // Fetch direct CSM info
+                fetchDirectCSMInfo();
+                
                 detailsModal.style.display = 'block';
             }
         });
     });
+    
+    // Direct CSM toggle button
+    const toggleDirectCSMBtn = document.getElementById('toggle-direct-csm-btn');
+    if (toggleDirectCSMBtn) {
+        toggleDirectCSMBtn.addEventListener('click', function() {
+            // Get current status
+            const currentStatus = document.getElementById('direct-csm-enabled').textContent;
+            const enable = currentStatus.toLowerCase() === 'false' || currentStatus.toLowerCase() === 'no';
+            
+            // Show loading state
+            this.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Updating...';
+            this.disabled = true;
+            
+            // Call API to toggle direct CSM
+            fetch('/api/admin/models/toggle-direct-csm', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ enable: enable })
+            })
+            .then(response => response.json())
+            .then(data => {
+                this.disabled = false;
+                this.innerHTML = enable ? 'Disable Direct CSM' : 'Enable Direct CSM';
+                
+                if (data.status === 'success') {
+                    showMessage(data.message, 'success');
+                    // Update the UI
+                    document.getElementById('direct-csm-enabled').textContent = data.direct_csm_enabled;
+                    document.getElementById('direct-csm-status').textContent = data.direct_csm_enabled ? 'Active' : 'Inactive';
+                    
+                    // Update button text
+                    this.innerHTML = data.direct_csm_enabled ? 'Disable Direct CSM' : 'Enable Direct CSM';
+                } else {
+                    showMessage(data.message, 'error');
+                }
+                
+                // Refresh model info
+                fetchDirectCSMInfo();
+            })
+            .catch(error => {
+                this.disabled = false;
+                this.innerHTML = enable ? 'Enable Direct CSM' : 'Disable Direct CSM';
+                showMessage('Error toggling Direct CSM: ' + error, 'error');
+            });
+        });
+    }
+    
+    // Test Direct CSM button
+    const testDirectCSMBtn = document.getElementById('test-direct-csm-btn');
+    if (testDirectCSMBtn) {
+        testDirectCSMBtn.addEventListener('click', function() {
+            // Show loading state
+            this.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Testing...';
+            this.disabled = true;
+            
+            // Call API to test direct CSM
+            fetch('/api/admin/models/test-direct-csm', {
+                method: 'POST'
+            })
+            .then(response => response.json())
+            .then(data => {
+                this.disabled = false;
+                this.innerHTML = 'Test Direct CSM';
+                
+                if (data.status === 'error') {
+                    showMessage(data.message, 'error');
+                } else {
+                    showMessage('Direct CSM test started. Task ID: ' + data.task_id, 'info');
+                    
+                    // Poll for task completion
+                    pollTaskStatus(data.task_id);
+                }
+            })
+            .catch(error => {
+                this.disabled = false;
+                this.innerHTML = 'Test Direct CSM';
+                showMessage('Error testing Direct CSM: ' + error, 'error');
+            });
+        });
+    }
+}
+
+/**
+ * Fetch Direct CSM information
+ */
+function fetchDirectCSMInfo() {
+    fetch('/api/admin/models/direct-csm-info')
+        .then(response => response.json())
+        .then(data => {
+            // Update the UI
+            document.getElementById('direct-csm-enabled').textContent = data.enabled;
+            document.getElementById('direct-csm-path').textContent = data.path;
+            document.getElementById('direct-csm-status').textContent = data.status;
+            
+            // Update toggle button text
+            const toggleBtn = document.getElementById('toggle-direct-csm-btn');
+            if (toggleBtn) {
+                toggleBtn.innerHTML = data.enabled ? 'Disable Direct CSM' : 'Enable Direct CSM';
+            }
+            
+            // Show warning if path doesn't exist or missing required files
+            if (!data.path_exists) {
+                showMessage('Warning: Direct CSM path does not exist. Please check the configuration.', 'warning');
+            } else if (!data.has_required_files) {
+                showMessage('Warning: Direct CSM path is missing required files. Please check the installation.', 'warning');
+            }
+        })
+        .catch(error => {
+            showMessage('Error fetching Direct CSM info: ' + error, 'error');
+        });
+}
+
+/**
+ * Poll task status
+ */
+function pollTaskStatus(taskId) {
+    const pollInterval = setInterval(() => {
+        fetch(`/api/admin/tasks/${taskId}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'completed') {
+                    clearInterval(pollInterval);
+                    showMessage('Direct CSM test completed successfully!', 'success');
+                    
+                    // Show the audio file if available
+                    if (data.result && data.result.file_url) {
+                        const audioPlayer = document.createElement('audio');
+                        audioPlayer.controls = true;
+                        audioPlayer.src = data.result.file_url;
+                        
+                        const audioContainer = document.createElement('div');
+                        audioContainer.className = 'audio-player-container';
+                        audioContainer.innerHTML = '<h4>Test Audio</h4>';
+                        audioContainer.appendChild(audioPlayer);
+                        
+                        // Add to the direct CSM section
+                        const directCSMSection = document.getElementById('direct-csm-section');
+                        if (directCSMSection) {
+                            // Remove any existing audio player
+                            const existingPlayer = directCSMSection.querySelector('.audio-player-container');
+                            if (existingPlayer) {
+                                existingPlayer.remove();
+                            }
+                            
+                            directCSMSection.appendChild(audioContainer);
+                        }
+                    }
+                } else if (data.status === 'failed') {
+                    clearInterval(pollInterval);
+                    showMessage('Direct CSM test failed: ' + (data.error || 'Unknown error'), 'error');
+                }
+                // Continue polling for 'pending' or 'processing' status
+            })
+            .catch(error => {
+                clearInterval(pollInterval);
+                showMessage('Error checking task status: ' + error, 'error');
+            });
+    }, 2000); // Poll every 2 seconds
 }
 
 /**
@@ -601,6 +765,17 @@ function initConfigManagement() {
             authFields.forEach(field => {
                 field.disabled = !this.checked;
             });
+        });
+    }
+    
+    // Enable/disable direct CSM path field based on checkbox
+    const useDirectCSMCheckbox = document.getElementById('use-direct-csm');
+    if (useDirectCSMCheckbox) {
+        useDirectCSMCheckbox.addEventListener('change', function() {
+            const directCSMPathField = document.getElementById('direct-csm-path');
+            if (directCSMPathField) {
+                directCSMPathField.disabled = !this.checked;
+            }
         });
     }
     

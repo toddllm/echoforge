@@ -14,15 +14,17 @@ import torchaudio
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union, Any
 
+from app.core import config
+
 # Set up logging
 logger = logging.getLogger("echoforge.direct_csm")
 
 # Add the CSM directory to the path
-CSM_PATH = "/home/tdeshane/tts_poc/voice_poc/csm"
+CSM_PATH = config.DIRECT_CSM_PATH
 sys.path.append(CSM_PATH)
 
 # Output directory
-OUTPUT_DIR = "/tmp/echoforge/voices/generated"
+OUTPUT_DIR = config.OUTPUT_DIR
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 class DirectCSMError(Exception):

@@ -38,6 +38,10 @@ AUTH_REQUIRED_FOR_PUBLIC = os.environ.get("AUTH_REQUIRED_FOR_PUBLIC", "true").lo
 # Model settings
 MODEL_PATH = "/home/tdeshane/.cache/huggingface/hub/models--sesame--csm-1b/snapshots/03ab46ff5cfdcc783cc76fcf9ea6fd0838503093/ckpt.pt"
 
+# Direct CSM settings
+USE_DIRECT_CSM = os.environ.get("USE_DIRECT_CSM", "true").lower() == "true"
+DIRECT_CSM_PATH = os.environ.get("DIRECT_CSM_PATH", "/home/tdeshane/tts_poc/voice_poc/csm")
+
 # Output settings
 OUTPUT_DIR = os.environ.get("OUTPUT_DIR", "/tmp/echoforge/voices")
 

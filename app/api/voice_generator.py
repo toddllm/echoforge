@@ -11,6 +11,7 @@ import uuid
 import torch
 from pathlib import Path
 from typing import List, Dict, Any, Tuple, Optional, Union
+import sys
 
 from app.core import config
 from app.models import (
@@ -35,7 +36,7 @@ class VoiceGenerator:
         model_path: str = config.MODEL_PATH,
         output_dir: str = config.OUTPUT_DIR,
         use_placeholder: bool = False,
-        use_direct_csm: bool = True,  # Default to using direct CSM
+        use_direct_csm: bool = config.USE_DIRECT_CSM,  # Use config setting
     ) -> None:
         """
         Initialize the voice generator.
@@ -121,6 +122,8 @@ class VoiceGenerator:
             if self.use_direct_csm:
                 try:
                     logger.info("Loading Direct CSM implementation")
+                    # Use the CSM path from config
+                    sys.path.append(config.DIRECT_CSM_PATH)
                     self.direct_csm = create_direct_csm(model_path=self.model_path, device=device)
                     self.direct_csm.initialize()
                     logger.info("Direct CSM implementation loaded successfully")
@@ -479,6 +482,39 @@ class VoiceGenerator:
         except Exception as e:
             logger.error(f"Error cleaning up old files: {e}")
             return 0
+    
+    def cleanup(self) -> None:
+        """
+        Clean up resources used by the voice generator.
+        
+        This method should be called when shutting down the application or
+        when reloading the model with different settings.
+        """
+        logger.info("Cleaning up voice generator resources")
+        
+        # Clean up direct CSM if it exists
+        if self.direct_csm is not None:
+            try:
+                self.direct_csm.cleanup()
+            except Exception as e:
+                logger.warning(f"Error cleaning up direct CSM: {e}")
+            self.direct_csm = None
+        
+        # Clean up standard CSM model if it exists
+        if self.model is not None:
+            # The standard CSM model doesn't have a cleanup method,
+            # so we just set it to None to allow garbage collection
+            self.model = None
+        
+        logger.info("Voice generator resources cleaned up")
+    
+    def shutdown(self) -> None:
+        """
+        Shutdown the voice generator.
+        
+        This is an alias for cleanup for compatibility.
+        """
+        return self.cleanup()
 
 
 class MockModel:

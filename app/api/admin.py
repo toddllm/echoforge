@@ -14,11 +14,13 @@ from typing import List, Dict, Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Body
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
+import time
 
 from app.core import config
 from app.core.auth import verify_credentials
 from app.api.voice_generator import voice_generator
 from app.core.task_manager import TaskManager
+from app.models import create_direct_csm, DirectCSMError
 
 # Try to import optional components
 try:
@@ -192,16 +194,26 @@ async def get_models(username: str = Depends(verify_credentials)):
         if HAS_TORCH and torch.cuda.is_available() and voice_generator.device == "cuda":
             device = f"cuda:{torch.cuda.current_device()} ({torch.cuda.get_device_name(0)})"
         
+        # Check if using direct CSM
+        model_name = "CSM Model"
+        if voice_generator.direct_csm is not None:
+            model_name = "Direct CSM Model"
+        
         models.append(ModelInfo(
-            name="CSM Model",
+            name=model_name,
             status="Loaded",
             device=device,
             memory_usage=None,  # Would require additional monitoring
             loaded_at=datetime.now()  # Placeholder - should be actual load time
         ))
     else:
+        # Check if direct CSM is enabled in config
+        model_name = "CSM Model"
+        if config.USE_DIRECT_CSM:
+            model_name = "Direct CSM Model"
+            
         models.append(ModelInfo(
-            name="CSM Model",
+            name=model_name,
             status="Not Loaded",
             device="None",
             memory_usage=None,
@@ -681,4 +693,186 @@ async def get_voice_file(filename: str, username: str = Depends(verify_credentia
         file_path, 
         media_type="audio/wav",
         filename=filename
-    ) 
+    )
+
+
+@router.post("/models/toggle-direct-csm")
+async def toggle_direct_csm(
+    username: str = Depends(verify_credentials),
+    enable: bool = Body(..., embed=True)
+):
+    """Toggle direct CSM implementation."""
+    logger.info(f"Toggling direct CSM to {enable} for user: {username}")
+    
+    if not voice_generator:
+        raise HTTPException(status_code=500, detail="Voice generator not available")
+    
+    # Update the config
+    config.USE_DIRECT_CSM = enable
+    
+    # Update the voice generator
+    voice_generator.use_direct_csm = enable
+    
+    # If the model is already loaded, we need to reload it
+    if voice_generator.is_initialized():
+        # Unload the current model
+        if hasattr(voice_generator, 'cleanup'):
+            voice_generator.cleanup()
+        else:
+            voice_generator.model = None
+            voice_generator.direct_csm = None
+        
+        # Reload the model
+        try:
+            voice_generator.load_model()
+            return {
+                "status": "success",
+                "message": f"Direct CSM {'enabled' if enable else 'disabled'} and model reloaded",
+                "direct_csm_enabled": enable
+            }
+        except Exception as e:
+            logger.error(f"Error reloading model after toggling direct CSM: {e}")
+            return {
+                "status": "error",
+                "message": f"Error reloading model: {str(e)}",
+                "direct_csm_enabled": enable
+            }
+    
+    return {
+        "status": "success",
+        "message": f"Direct CSM {'enabled' if enable else 'disabled'}",
+        "direct_csm_enabled": enable
+    }
+
+
+@router.post("/models/test-direct-csm")
+async def test_direct_csm(
+    background_tasks: BackgroundTasks,
+    username: str = Depends(verify_credentials)
+):
+    """Test direct CSM implementation."""
+    logger.info(f"Testing direct CSM for user: {username}")
+    
+    if not voice_generator:
+        raise HTTPException(status_code=500, detail="Voice generator not available")
+    
+    # Check if direct CSM is enabled
+    if not config.USE_DIRECT_CSM:
+        return {
+            "status": "error",
+            "message": "Direct CSM is not enabled. Please enable it first."
+        }
+    
+    # Generate a test task
+    task_id = task_manager.register_task("test_direct_csm")
+    
+    # Launch background task for testing
+    background_tasks.add_task(
+        _test_direct_csm,
+        task_id=task_id
+    )
+    
+    return {
+        "task_id": task_id,
+        "status": "pending",
+        "message": "Direct CSM test has been started"
+    }
+
+
+async def _test_direct_csm(task_id: str):
+    """Background task for testing direct CSM."""
+    logger.info(f"Starting direct CSM test for task {task_id}")
+    
+    try:
+        # Update task status
+        task_manager.update_task(task_id, status="processing")
+        
+        # Test text
+        test_text = "This is a test of the direct CSM implementation. The voice should be clear and natural sounding."
+        
+        # Create a direct CSM instance
+        try:
+            # Create and initialize direct CSM
+            direct_csm = create_direct_csm(model_path=config.MODEL_PATH)
+            direct_csm.initialize()
+            
+            # Generate speech
+            audio, sample_rate = direct_csm.generate_speech(
+                text=test_text,
+                speaker_id=config.DEFAULT_SPEAKER_ID,
+                temperature=config.DEFAULT_TEMPERATURE,
+                top_k=config.DEFAULT_TOP_K
+            )
+            
+            # Create a test output directory
+            test_output_dir = os.path.join(config.OUTPUT_DIR, "test")
+            os.makedirs(test_output_dir, exist_ok=True)
+            
+            # Save the audio
+            timestamp = int(time.time())
+            test_file_path = os.path.join(test_output_dir, f"direct_csm_test_{timestamp}.wav")
+            direct_csm.save_audio(audio, sample_rate, test_file_path)
+            
+            # Update task with success
+            task_manager.update_task(
+                task_id,
+                status="completed",
+                result={
+                    "file_path": test_file_path,
+                    "file_url": f"/api/admin/voices/test/direct_csm_test_{timestamp}.wav",
+                    "message": "Direct CSM test completed successfully"
+                }
+            )
+            logger.info(f"Direct CSM test completed for task {task_id}: {test_file_path}")
+            
+        except DirectCSMError as e:
+            logger.error(f"Direct CSM test failed: {e}")
+            task_manager.update_task(
+                task_id,
+                status="failed",
+                error=f"Direct CSM test failed: {str(e)}"
+            )
+            
+    except Exception as e:
+        logger.error(f"Error in direct CSM test: {e}")
+        task_manager.update_task(
+            task_id,
+            status="failed",
+            error=f"Error in direct CSM test: {str(e)}"
+        )
+
+
+@router.get("/models/direct-csm-info")
+async def get_direct_csm_info(username: str = Depends(verify_credentials)):
+    """Get direct CSM information."""
+    logger.info(f"Getting direct CSM info for user: {username}")
+    
+    # Check if direct CSM is enabled in config
+    is_enabled = config.USE_DIRECT_CSM
+    
+    # Check if direct CSM is loaded
+    is_loaded = False
+    if voice_generator and voice_generator.is_initialized() and voice_generator.direct_csm is not None:
+        is_loaded = True
+    
+    # Get the CSM path
+    csm_path = config.DIRECT_CSM_PATH
+    
+    # Check if the CSM path exists
+    path_exists = os.path.exists(csm_path)
+    
+    # Check if the CSM path has the required files
+    has_required_files = False
+    if path_exists:
+        required_files = ["generator.py", "models.py"]
+        existing_files = os.listdir(csm_path)
+        has_required_files = all(file in existing_files for file in required_files)
+    
+    return {
+        "enabled": is_enabled,
+        "loaded": is_loaded,
+        "path": csm_path,
+        "path_exists": path_exists,
+        "has_required_files": has_required_files,
+        "status": "Active" if is_loaded else "Inactive"
+    } 

@@ -109,6 +109,20 @@
                     <small class="form-text">Default voice style to use</small>
                 </div>
                 
+                <div class="form-group">
+                    <div class="checkbox-control">
+                        <input type="checkbox" id="use-direct-csm" name="USE_DIRECT_CSM" {% if config.USE_DIRECT_CSM %}checked{% endif %}>
+                        <label for="use-direct-csm">Use Direct CSM Implementation</label>
+                    </div>
+                    <small class="form-text">Use the direct CSM implementation for improved performance and audio quality</small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="direct-csm-path">Direct CSM Path</label>
+                    <input type="text" id="direct-csm-path" name="DIRECT_CSM_PATH" value="{{ config.DIRECT_CSM_PATH }}" class="form-control" {% if not config.USE_DIRECT_CSM %}disabled{% endif %}>
+                    <small class="form-text">Path to the CSM code directory (typically /home/tdeshane/tts_poc/voice_poc/csm)</small>
+                </div>
+                
                 <div class="form-actions">
                     <button type="submit" class="button primary-button">Save Changes</button>
                     <button type="reset" class="button secondary-button">Reset</button>
