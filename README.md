@@ -29,14 +29,29 @@ EchoForge wraps this technology in a user-friendly web interface and API, making
 
 ### Direct CSM Implementation
 
-EchoForge includes a direct CSM implementation that bypasses adapter layers and directly uses the CSM model. This approach offers several advantages:
+EchoForge now uses the Direct CSM implementation by default for faster voice generation, especially on CUDA-enabled devices.
 
-- **Improved Performance**: Direct access to the model reduces overhead
-- **Better Audio Quality**: Fewer transformations lead to clearer voice output
-- **Simplified Architecture**: Reduces complexity in the voice generation pipeline
-- **Fallback Mechanisms**: Automatic fallback to CPU if CUDA fails
+#### Features
+- Up to 25x faster generation on GPU compared to CPU
+- Maintains the same high-quality voice output
+- Automatically falls back to CPU if CUDA is unavailable
 
-For more details, see the [Direct CSM documentation](docs/DIRECT_CSM.md).
+#### Usage
+To start the server with Direct CSM enabled:
+```
+python run.py --direct-csm
+```
+
+When using the API, specify `device=cuda` for faster generation:
+```
+curl -X POST http://localhost:8779/api/generate \
+  -H "Content-Type: application/json" \
+  -d '{"text": "Your text here", "voice": "male", "temperature": 0.7, "device": "cuda"}'
+```
+
+#### Performance
+- CUDA generation: ~3-6 seconds
+- CPU generation: ~150 seconds
 
 ## Installation
 
