@@ -124,7 +124,14 @@ class VoiceGenerator:
                     logger.info("Loading Direct CSM implementation")
                     # Use the CSM path from config
                     sys.path.append(config.DIRECT_CSM_PATH)
-                    self.direct_csm = create_direct_csm(model_path=self.model_path, device=device)
+                    
+                    # Direct CSM doesn't support 'auto', so translate it
+                    direct_csm_device = device
+                    if direct_csm_device == "auto":
+                        direct_csm_device = "cuda" if torch.cuda.is_available() else "cpu"
+                        logger.info(f"Translating 'auto' device to '{direct_csm_device}' for Direct CSM")
+                    
+                    self.direct_csm = create_direct_csm(model_path=self.model_path, device=direct_csm_device)
                     self.direct_csm.initialize()
                     logger.info("Direct CSM implementation loaded successfully")
                     return True
@@ -259,12 +266,19 @@ class VoiceGenerator:
                 try:
                     # Generate speech using direct CSM
                     logger.info("Using Direct CSM for voice generation")
+                    
+                    # Direct CSM doesn't support 'auto', so translate it
+                    direct_csm_device = device
+                    if direct_csm_device == "auto":
+                        direct_csm_device = "cuda" if torch.cuda.is_available() else "cpu"
+                        logger.info(f"Translating 'auto' device to '{direct_csm_device}' for Direct CSM")
+                    
                     audio, sample_rate = self.direct_csm.generate_speech(
                         text=text,
                         speaker_id=speaker_id,
                         temperature=temperature,
                         top_k=top_k,
-                        device=device
+                        device=direct_csm_device
                     )
                     
                     # Save the audio
