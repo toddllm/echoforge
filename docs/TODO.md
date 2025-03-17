@@ -2,6 +2,30 @@
 
 This document tracks the current issues and planned improvements for the EchoForge application.
 
+## Prioritized Issues
+
+- [ ] **Disable GitHub CI checks temporarily**
+  - Disable CI checks until critical issues are resolved
+  - Document the plan to re-enable them with proper configuration
+
+- [ ] **Fix security warnings in model loading**
+  - Address FutureWarning about `torch.load` with `weights_only=False`
+  - Implement proper security measures for model loading (see https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models)
+  - Set `weights_only=True` for untrusted model files
+
+- [ ] **Resolve namespace conflict warnings**
+  - Fix warning about field "model_loaded" having conflict with protected namespace "model_"
+  - Resolve by setting `model_config['protected_namespaces'] = ()`
+
+- [ ] **Implement actual watermarking**
+  - Replace mock watermarker with actual implementation
+  - Test watermarking functionality
+
+- [ ] **Enhance security for default credentials**
+  - Fix warning about using default credentials
+  - Force setting custom username and password during setup
+  - Add credential rotation mechanism
+
 ## High Priority
 
 ### Server Improvements
