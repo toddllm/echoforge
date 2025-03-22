@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+
+{% block title %}Login - EchoForge{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="/static/css/auth.css">
+{% endblock %}
+
+{% block content %}
+<div class="container d-flex justify-content-center align-items-center min-vh-100">
+<div class="row justify-content-center w-100">
+<div class="col-12">
+<div class="auth-card mx-auto">
+<div class="card-header">
+<h2 class="auth-title">Welcome Back</h2>
+</div>
+<div class="card-body">
+<p class="auth-subtitle">Sign in to your EchoForge account to continue your voice creation journey</p>
+<div class="alert alert-danger" id="login-error" style="display: none;">
+<span id="login-error-message"></span>
+</div>
+<form id="login-form">
+<div class="form-floating mb-4">
+<input class="form-control" id="username" name="username" required="" type="text" placeholder="Username or Email"/>
+<label for="username">Username or Email</label>
+</div>
+<div class="form-floating mb-4">
+<input class="form-control" id="password" name="password" required="" type="password" placeholder="Password"/>
+<label for="password">Password</label>
+</div>
+<div class="d-grid gap-2 mb-3">
+<button class="btn btn-primary" id="login-button" type="submit">Sign In</button>
+</div>
+<div class="text-center">
+<a href="/forgot-password">Forgot your password?</a>
+</div>
+</form>
+</div>
+<div class="auth-footer">
+<p class="mb-0">Don't have an account? <a href="/signup">Sign up</a></p>
+</div>
+</div>
+</div>
+</div>
+</div>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const loginForm = document.getElementById('login-form');
+        const loginButton = document.getElementById('login-button');
+        const errorDiv = document.getElementById('login-error');
+        const errorMessage = document.getElementById('login-error-message');
+
+        loginForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            // Disable button and show loading state
+            loginButton.disabled = true;
+            loginButton.classList.add('btn-loading');
+            loginButton.textContent = 'Signing in...';
+            
+            // Hide previous errors
+            errorDiv.style.display = 'none';
+            
+            try {
+                const response = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: new URLSearchParams({
+                        'username': document.getElementById('username').value,
+                        'password': document.getElementById('password').value,
+                    })
+                });
+                
+                if (!response.ok) {
+                    const data = await response.json();
+                    throw new Error(data.detail || 'Login failed. Please check your credentials.');
+                }
+                
+                const data = await response.json();
+                
+                // Store token and user info
+                localStorage.setItem('access_token', data.access_token);
+                
+                // Set session cookie
+                document.cookie = `echoforge_session=session_${data.access_token}; path=/; max-age=86400; secure;`;
+                
+                // Get the redirect URL or default to dashboard
+                const urlParams = new URLSearchParams(window.location.search);
+                const nextUrl = urlParams.get('next') || '/dashboard';
+                
+                // Redirect to the target page
+                window.location.href = nextUrl;
+                
+            } catch (error) {
+                // Show error
+                errorMessage.textContent = error.message;
+                errorDiv.style.display = 'block';
+                
+                // Reset button
+                loginButton.disabled = false;
+                loginButton.classList.remove('btn-loading');
+                loginButton.textContent = 'Sign In';
+            }
+        });
+    });
+</script>
+{% endblock %}

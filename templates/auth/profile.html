@@ -1,0 +1,258 @@
+{% extends "base.html" %}
+
+{% block title %}My Profile - EchoForge{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card shadow-sm">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h3>My Profile</h3>
+                    <button id="logout-button" class="btn btn-outline-danger btn-sm">Logout</button>
+                </div>
+                <div class="card-body">
+                    <div id="profile-error" class="alert alert-danger" style="display: none;">
+                        <span id="profile-error-message"></span>
+                    </div>
+                    <div id="profile-success" class="alert alert-success" style="display: none;">
+                        <span id="profile-success-message">Profile updated successfully!</span>
+                    </div>
+                    
+                    <!-- Profile Form -->
+                    <form id="profile-form" class="mb-5">
+                        <h4 class="mb-3">Personal Information</h4>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="firstName" class="form-label">First Name</label>
+                                <input type="text" class="form-control" id="firstName" name="firstName" required>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="lastName" class="form-label">Last Name</label>
+                                <input type="text" class="form-control" id="lastName" name="lastName" required>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="email" class="form-label">Email address</label>
+                            <input type="email" class="form-control" id="email" name="email" disabled>
+                            <div class="form-text">Email address cannot be changed.</div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="username" class="form-label">Username</label>
+                            <input type="text" class="form-control" id="username" name="username" disabled>
+                            <div class="form-text">Username cannot be changed.</div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="bio" class="form-label">Bio</label>
+                            <textarea class="form-control" id="bio" name="bio" rows="3"></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label for="organization" class="form-label">Organization</label>
+                            <input type="text" class="form-control" id="organization" name="organization">
+                        </div>
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-primary" id="update-profile-button">Update Profile</button>
+                        </div>
+                    </form>
+                    
+                    <!-- Password Change Form -->
+                    <h4 class="mb-3">Change Password</h4>
+                    <form id="password-form">
+                        <div id="password-error" class="alert alert-danger" style="display: none;">
+                            <span id="password-error-message"></span>
+                        </div>
+                        <div id="password-success" class="alert alert-success" style="display: none;">
+                            Password changed successfully!
+                        </div>
+                        <div class="mb-3">
+                            <label for="currentPassword" class="form-label">Current Password</label>
+                            <input type="password" class="form-control" id="currentPassword" name="currentPassword" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="newPassword" class="form-label">New Password</label>
+                            <input type="password" class="form-control" id="newPassword" name="newPassword" required minlength="8">
+                            <div class="form-text">Password must be at least 8 characters long.</div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="confirmNewPassword" class="form-label">Confirm New Password</label>
+                            <input type="password" class="form-control" id="confirmNewPassword" name="confirmNewPassword" required>
+                        </div>
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-warning" id="change-password-button">Change Password</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Check if user is logged in
+        const token = localStorage.getItem('access_token');
+        if (!token) {
+            window.location.href = '/login';
+            return;
+        }
+        
+        // Set up logout functionality
+        document.getElementById('logout-button').addEventListener('click', function() {
+            localStorage.removeItem('access_token');
+            localStorage.removeItem('user_id');
+            localStorage.removeItem('username');
+            localStorage.removeItem('email');
+            localStorage.removeItem('is_admin');
+            window.location.href = '/login';
+        });
+        
+        // Load user profile
+        loadUserProfile();
+        
+        // Profile form submission
+        const profileForm = document.getElementById('profile-form');
+        const updateProfileButton = document.getElementById('update-profile-button');
+        
+        profileForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            // Disable button and show loading state
+            updateProfileButton.disabled = true;
+            updateProfileButton.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Updating...';
+            
+            // Hide previous messages
+            document.getElementById('profile-error').style.display = 'none';
+            document.getElementById('profile-success').style.display = 'none';
+            
+            try {
+                const response = await fetch('/api/users/profile', {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({
+                        first_name: document.getElementById('firstName').value,
+                        last_name: document.getElementById('lastName').value,
+                        bio: document.getElementById('bio').value,
+                        organization: document.getElementById('organization').value
+                    })
+                });
+                
+                if (!response.ok) {
+                    const data = await response.json();
+                    throw new Error(data.detail || 'Failed to update profile. Please try again.');
+                }
+                
+                // Show success message
+                document.getElementById('profile-success').style.display = 'block';
+                
+            } catch (error) {
+                // Show error
+                document.getElementById('profile-error-message').textContent = error.message;
+                document.getElementById('profile-error').style.display = 'block';
+            } finally {
+                // Reset button
+                updateProfileButton.disabled = false;
+                updateProfileButton.textContent = 'Update Profile';
+            }
+        });
+        
+        // Password form submission
+        const passwordForm = document.getElementById('password-form');
+        const changePasswordButton = document.getElementById('change-password-button');
+        
+        passwordForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            // Perform validation
+            const newPassword = document.getElementById('newPassword').value;
+            const confirmNewPassword = document.getElementById('confirmNewPassword').value;
+            
+            if (newPassword !== confirmNewPassword) {
+                document.getElementById('password-error-message').textContent = "Passwords don't match";
+                document.getElementById('password-error').style.display = 'block';
+                return;
+            }
+            
+            // Disable button and show loading state
+            changePasswordButton.disabled = true;
+            changePasswordButton.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Changing...';
+            
+            // Hide previous messages
+            document.getElementById('password-error').style.display = 'none';
+            document.getElementById('password-success').style.display = 'none';
+            
+            try {
+                const response = await fetch('/api/users/change-password', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({
+                        current_password: document.getElementById('currentPassword').value,
+                        new_password: newPassword
+                    })
+                });
+                
+                if (!response.ok) {
+                    const data = await response.json();
+                    throw new Error(data.detail || 'Failed to change password. Please try again.');
+                }
+                
+                // Show success message and reset form
+                document.getElementById('password-success').style.display = 'block';
+                passwordForm.reset();
+                
+            } catch (error) {
+                // Show error
+                document.getElementById('password-error-message').textContent = error.message;
+                document.getElementById('password-error').style.display = 'block';
+            } finally {
+                // Reset button
+                changePasswordButton.disabled = false;
+                changePasswordButton.textContent = 'Change Password';
+            }
+        });
+        
+        async function loadUserProfile() {
+            try {
+                const response = await fetch('/api/users/profile', {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                if (!response.ok) {
+                    if (response.status === 401) {
+                        // Token expired or invalid, redirect to login
+                        localStorage.removeItem('access_token');
+                        window.location.href = '/login';
+                        return;
+                    }
+                    throw new Error('Failed to load profile data.');
+                }
+                
+                const profile = await response.json();
+                
+                // Fill form with profile data
+                document.getElementById('firstName').value = profile.first_name || '';
+                document.getElementById('lastName').value = profile.last_name || '';
+                document.getElementById('bio').value = profile.bio || '';
+                document.getElementById('organization').value = profile.organization || '';
+                
+                // Fill read-only fields from localStorage
+                document.getElementById('email').value = localStorage.getItem('email') || '';
+                document.getElementById('username').value = localStorage.getItem('username') || '';
+                
+            } catch (error) {
+                console.error('Error loading profile:', error);
+                document.getElementById('profile-error-message').textContent = error.message;
+                document.getElementById('profile-error').style.display = 'block';
+            }
+        }
+    });
+</script>
+{% endblock %}
