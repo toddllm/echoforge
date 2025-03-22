@@ -1,0 +1,666 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EchoForge Voice Character Showcase</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        
+        h1, h2 {
+            text-align: center;
+            color: #333;
+        }
+        
+        .character-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 20px;
+            margin-top: 30px;
+        }
+        
+        .character-card {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            overflow: hidden;
+            transition: transform 0.3s ease;
+        }
+        
+        .character-card:hover {
+            transform: translateY(-5px);
+        }
+        
+        .male-card {
+            border-left: 5px solid #4a90e2;
+        }
+        
+        .female-card {
+            border-left: 5px solid #e24a90;
+        }
+        
+        .character-header {
+            padding: 15px;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .character-name {
+            margin: 0;
+            color: #333;
+        }
+        
+        .character-title {
+            margin: 5px 0 0;
+            color: #666;
+            font-style: italic;
+        }
+        
+        .character-body {
+            padding: 15px;
+        }
+        
+        .character-description {
+            color: #555;
+            margin-bottom: 15px;
+        }
+        
+        .voice-info {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            font-size: 0.9em;
+            color: #666;
+        }
+        
+        .voice-params {
+            font-family: monospace;
+            background: #f0f0f0;
+            padding: 2px 5px;
+            border-radius: 3px;
+        }
+        
+        audio {
+            width: 100%;
+            margin: 5px 0;
+        }
+        
+        .tts-container {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #eee;
+        }
+        
+        .tts-input {
+            width: 100%;
+            height: 80px;
+            padding: 10px;
+            box-sizing: border-box;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            resize: none;
+            margin-bottom: 10px;
+        }
+        
+        .tts-btn {
+            background: #4a90e2;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 8px 15px;
+            cursor: pointer;
+        }
+        
+        .tts-status {
+            margin-top: 10px;
+            padding: 10px;
+            font-size: 0.9em;
+            border-radius: 4px;
+            display: none;
+        }
+        
+        .status-loading {
+            display: block;
+            background-color: #e3f2fd;
+            color: #1976d2;
+            border-left: 4px solid #1976d2;
+        }
+        
+        .status-success {
+            display: block;
+            background-color: #e8f5e9;
+            color: #388e3c;
+            border-left: 4px solid #388e3c;
+        }
+        
+        .status-error {
+            display: block;
+            background-color: #ffebee;
+            color: #d32f2f;
+            border-left: 4px solid #d32f2f;
+        }
+        
+        .status-retrying {
+            display: block;
+            background-color: #fff8e1;
+            color: #ff8f00;
+            border-left: 4px solid #ff8f00;
+        }
+        
+        .filters {
+            background: white;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 15px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .filter-group {
+            display: flex;
+            align-items: center;
+        }
+        
+        .filter-group label {
+            margin-right: 8px;
+            font-weight: bold;
+        }
+        
+        .filter-group select {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        
+        .filter-btn {
+            background: #4a90e2;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 8px 15px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <h1>EchoForge Voice Character Showcase</h1>
+    <p style="text-align: center;">Explore AI-generated voice characters featuring CSM voice cloning technology</p>
+    
+    <div class="filters">
+        <div class="filter-group">
+            <label for="gender-filter">Gender:</label>
+            <select id="gender-filter">
+                <option value="all">All</option>
+                <option value="male">Male</option>
+                <option value="female">Female</option>
+            </select>
+        </div>
+        <div class="filter-group">
+            <label for="style-filter">Style:</label>
+            <select id="style-filter">
+                <option value="all">All</option>
+                <option value="conversation">Conversation</option>
+                <option value="game_instructions">Game Instructions</option>
+                <option value="technical">Technical</option>
+                <option value="emotional">Emotional</option>
+                <option value="medium">Medium</option>
+                <option value="short">Short</option>
+                <option value="accent_variation">Accent Variation</option>
+            </select>
+        </div>
+        <button id="apply-filters" class="filter-btn">Apply Filters</button>
+        <button id="reset-filters" class="filter-btn" style="background: #9e9e9e;">Reset</button>
+    </div>
+    
+    <div class="character-grid" id="character-grid">
+        <!-- Characters will be dynamically added here -->
+        <div id="loading" style="grid-column: 1 / -1; text-align: center; padding: 50px;">
+            Loading characters...
+        </div>
+    </div>
+    
+    <!-- Audio URL fix script (directly embedded) -->
+    <script>
+    // Immediate fix for audio URL handling issues
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log('🔧 Audio fix script loaded - ' + new Date().toISOString());
+        
+        // Function to handle audio URL construction
+        function constructProperAudioUrl(data) {
+            console.log('🔍 Processing API response:', data);
+            
+            if (!data) {
+                console.error('❌ No data provided to constructProperAudioUrl');
+                return null;
+            }
+            
+            let resultUrl = null;
+            
+            // Try different URL construction methods
+            if (data.result_url && typeof data.result_url === 'string') {
+                resultUrl = data.result_url;
+                console.log('✓ Using result_url from API:', resultUrl);
+            } 
+            else if (data.audio_file && typeof data.audio_file === 'string') {
+                resultUrl = `/voices/${data.audio_file}`;
+                console.log('✓ Constructed URL from audio_file:', resultUrl);
+            }
+            else if (data.task_id && typeof data.task_id === 'string') {
+                resultUrl = `/voices/character_voice_${data.task_id}.wav`;
+                console.log('✓ Fallback: constructed URL from task_id:', resultUrl);
+            }
+            
+            return resultUrl;
+        }
+        
+        // Original pollTTSStatus function will be monkey-patched
+        const originalPollTTSStatus = window.pollTTSStatus;
+        window.pollTTSStatus = function(statusPath, statusElement, characterIndex) {
+            console.log('🔄 Enhanced pollTTSStatus called:', statusPath);
+            
+            // Call the original function, but intercept the fetch call
+            const originalFetch = window.fetch;
+            window.fetch = function(url, options) {
+                return originalFetch(url, options).then(response => {
+                    // Process the response if it's from the status API
+                    if (url === statusPath) {
+                        const clonedResponse = response.clone();
+                        
+                        clonedResponse.json().then(data => {
+                            console.log('📊 Status API Response for', statusPath, ':', data);
+                            
+                            if (data.status === 'completed') {
+                                // Use our custom URL construction
+                                const audioUrl = constructProperAudioUrl(data);
+                                console.log('🎵 Constructed audio URL:', audioUrl);
+                                
+                                if (audioUrl) {
+                                    // Find the audio element in the character card
+                                    const characterCards = document.querySelectorAll('.character-card');
+                                    if (characterIndex < characterCards.length) {
+                                        const card = characterCards[characterIndex];
+                                        const audioEl = card.querySelector('audio');
+                                        
+                                        if (audioEl) {
+                                            console.log('🔊 Setting audio source for character', characterIndex, 'to', audioUrl);
+                                            audioEl.src = audioUrl;
+                                            audioEl.load();
+                                        }
+                                    }
+                                }
+                            }
+                        }).catch(e => console.error('Error parsing response:', e));
+                    }
+                    return response;
+                });
+            };
+            
+            // Call the original function with our monkey-patched fetch
+            return originalPollTTSStatus(statusPath, statusElement, characterIndex);
+        };
+        
+        console.log('🔧 Audio fix script initialization complete');
+    });
+    </script>
+    
+    <script>
+        // Character archetypes/templates for male and female voices
+        const maleCharacters = [
+            { 
+                name: "James Cooper", 
+                title: "Game Narrator",
+                descriptions: [
+                    "A veteran voice actor known for his dramatic storytelling.",
+                    "A commanding presence in the world of fantasy game narration.",
+                    "His deep, resonant voice draws players into immersive worlds."
+                ]
+            },
+            { 
+                name: "Alex Warren", 
+                title: "Technical Expert",
+                descriptions: [
+                    "Known for explaining complex technical concepts with clarity.",
+                    "His precise, confident delivery makes difficult subjects accessible.",
+                    "The go-to voice for scientific and technological explanations."
+                ]
+            },
+            { 
+                name: "Nathan Drake", 
+                title: "Adventure Guide",
+                descriptions: [
+                    "His energetic tone pairs perfectly with action-packed narratives.",
+                    "A versatile voice that can convey both excitement and tension.",
+                    "Brings a sense of wonder to explorations and discoveries."
+                ]
+            },
+            { 
+                name: "Professor Marcus Wells", 
+                title: "Academic Authority",
+                descriptions: [
+                    "His measured cadence commands respect in educational contexts.",
+                    "Decades of experience narrating documentaries and lectures.",
+                    "A trustworthy voice that lends credibility to any subject."
+                ]
+            }
+        ];
+        
+        const femaleCharacters = [
+            { 
+                name: "Emma Richardson", 
+                title: "Game Narrator",
+                descriptions: [
+                    "Her expressive storytelling brings game worlds to life.",
+                    "Known for her emotional range and captivating delivery.",
+                    "Creates immersive gaming experiences through expert narration."
+                ]
+            },
+            { 
+                name: "Dr. Sophia Chen", 
+                title: "Technical Specialist",
+                descriptions: [
+                    "Her clear, authoritative delivery makes complex topics accessible.",
+                    "A trusted voice in scientific and technological explanations.",
+                    "Combines expertise with excellent communication skills."
+                ]
+            },
+            { 
+                name: "Olivia Hayes", 
+                title: "Conversational AI",
+                descriptions: [
+                    "Her warm, friendly tone creates natural-feeling interactions.",
+                    "Designed to put users at ease in conversation-based interfaces.",
+                    "The perfect balance of professional and approachable."
+                ]
+            },
+            { 
+                name: "Victoria Knight", 
+                title: "Executive Assistant",
+                descriptions: [
+                    "Her efficient, professional demeanor inspires confidence.",
+                    "Clear and concise communication is her specialty.",
+                    "The perfect voice for business and productivity applications."
+                ]
+            }
+        ];
+        
+        // Function to generate TTS using the server API
+        async function generateTTS(voicePath, text, characterIndex) {
+            const statusElement = document.getElementById(`tts-status-${characterIndex}`);
+            
+            if (!text || text.trim() === '') {
+                statusElement.textContent = "Please enter some text to generate speech";
+                statusElement.className = "tts-status status-error";
+                return;
+            }
+            
+            try {
+                console.log(`Generating speech with reference audio: ${voicePath} and text: ${text}`);
+                statusElement.textContent = "Generating speech...";
+                statusElement.className = "tts-status status-loading";
+                statusElement.style.display = "block";
+                
+                const response = await fetch('/api/voice-cloning/generate-speech', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        reference_audio: voicePath,
+                        text: text
+                    }),
+                });
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error(`Server error: ${response.status}`, errorText);
+                    throw new Error(`Server responded with ${response.status}`);
+                }
+                
+                const data = await response.json();
+                console.log('API response:', data);
+                
+                if (data.task_id) {
+                    // If task_id is returned, poll for results
+                    statusElement.textContent = "Processing... This may take up to a minute.";
+                    pollTTSStatus(`/api/voice-cloning/status/${data.task_id}`, statusElement, characterIndex);
+                } else if (data.audio_path) {
+                    // Immediate result (unlikely)
+                    const audioElement = document.getElementById(`tts-audio-${characterIndex}`);
+                    audioElement.src = data.audio_path;
+                    audioElement.style.display = "block";
+                    
+                    statusElement.textContent = "Speech generated successfully!";
+                    statusElement.className = "tts-status status-success";
+                    
+                    setTimeout(() => {
+                        statusElement.style.display = "none";
+                    }, 5000);
+                }
+            } catch (error) {
+                statusElement.textContent = `Error: ${error.message}`;
+                statusElement.className = "tts-status status-error";
+            }
+        }
+        
+        // Function to poll for TTS generation status
+        async function pollTTSStatus(statusPath, statusElement, characterIndex) {
+            let retries = 0;
+            const maxRetries = 30; // Poll for up to 30 attempts (60 seconds with 2s interval)
+            
+            const checkStatus = async () => {
+                try {
+                    console.log(`Polling status attempt ${retries + 1}/${maxRetries} from: ${statusPath}`);
+                    const response = await fetch(statusPath);
+                    
+                    if (!response.ok) {
+                        console.error(`Status check failed with status ${response.status}`);
+                        throw new Error(`Server responded with ${response.status}`);
+                    }
+                    
+                    const data = await response.json();
+                    console.log('Status response:', data);
+                    
+                    if (data.status === "completed") {
+                        // Task completed
+                        const audioElement = document.getElementById(`tts-audio-${characterIndex}`);
+                        
+                        // Determine the correct audio source
+                        let audioUrl = null;
+                        if (data.result_url) {
+                            audioUrl = data.result_url;
+                            console.log('Using result_url:', audioUrl);
+                        } else if (data.audio_file) {
+                            audioUrl = `/voices/${data.audio_file}`;
+                            console.log('Using audio_file:', audioUrl);
+                        } else if (data.audio_path) {
+                            audioUrl = data.audio_path; // Legacy support
+                            console.log('Using audio_path:', audioUrl);
+                        } else if (data.task_id) {
+                            audioUrl = `/voices/character_voice_${data.task_id}.wav`;
+                            console.log('Fallback to constructed URL from task_id:', audioUrl);
+                        }
+                        
+                        if (audioUrl) {
+                            console.log('Setting audio source to:', audioUrl);
+                            audioElement.src = audioUrl;
+                            audioElement.style.display = "block";
+                        } else {
+                            console.error('No valid URL found in API response:', data);
+                            statusElement.textContent = "Error: Could not find audio URL";
+                            statusElement.className = "tts-status status-error";
+                            return true; // Stop polling
+                        }
+                        
+                        statusElement.textContent = "Speech generated successfully!";
+                        statusElement.className = "tts-status status-success";
+                        
+                        setTimeout(() => {
+                            statusElement.style.display = "none";
+                        }, 5000);
+                        return true; // Stop polling
+                    } else if (data.status === "failed") {
+                        // Task failed
+                        console.error('Generation failed:', data.error || 'Unknown error');
+                        statusElement.textContent = `Generation failed: ${data.error || "Unknown error"}`;
+                        statusElement.className = "tts-status status-error";
+                        return true; // Stop polling
+                    } else {
+                        // Task still processing, continue polling
+                        statusElement.textContent = `Processing... ${data.progress || ""}`;
+                        return false; // Continue polling
+                    }
+                } catch (error) {
+                    statusElement.textContent = `Error checking status: ${error.message}`;
+                    statusElement.className = "tts-status status-error";
+                    return true; // Stop polling on error
+                }
+            };
+            
+            // Start the polling process
+            const poll = async () => {
+                if (retries >= maxRetries) {
+                    statusElement.textContent = "Timed out waiting for response";
+                    statusElement.className = "tts-status status-error";
+                    return;
+                }
+                
+                const done = await checkStatus();
+                
+                if (!done) {
+                    retries++;
+                    setTimeout(poll, 2000); // Poll every 2 seconds
+                }
+            };
+            
+            // Start polling
+            poll();
+        }
+        
+        // Load voice samples from server
+        async function loadVoiceSamples() {
+            try {
+                console.log('Attempting to load voice samples...');
+                // The correct path based on how static files are mounted in FastAPI
+                const response = await fetch('/static/voices/voice_samples.json');
+                
+                if (!response.ok) {
+                    throw new Error(`Failed to load voice samples: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                console.log('Voice samples loaded successfully:', data);
+                return data;
+            } catch (error) {
+                console.error('Error loading voice samples:', error);
+                document.getElementById('loading').textContent = `Error loading voices: ${error.message}`;
+                return null;
+            }
+        }
+        
+        // Populate character cards
+        function populateCharacters(voiceData) {
+            const grid = document.getElementById('character-grid');
+            grid.innerHTML = ''; // Clear loading message
+            
+            if (!voiceData || !voiceData.samples || voiceData.samples.length === 0) {
+                grid.innerHTML = '<div style="grid-column: 1 / -1; text-align: center; padding: 50px;">No voice samples found</div>';
+                return;
+            }
+            
+            let index = 0;
+            voiceData.samples.forEach(voice => {
+                // Get character template based on gender
+                const gender = voice.gender || (voice.speaker_id < 4 ? 'male' : 'female');
+                const characterTemplates = gender === 'male' ? maleCharacters : femaleCharacters;
+                const characterTemplate = characterTemplates[index % characterTemplates.length];
+                
+                // Create character card
+                const card = document.createElement('div');
+                card.className = `character-card ${gender}-card`;
+                card.dataset.gender = gender;
+                card.dataset.style = voice.style || '';
+                
+                // Format voice parameters
+                const voiceParams = `temp=${voice.temperature || '?'}, topk=${voice.topk || '?'}`;
+                
+                // Choose a random description from the template
+                const descriptionIndex = Math.floor(Math.random() * characterTemplate.descriptions.length);
+                const description = characterTemplate.descriptions[descriptionIndex];
+                
+                card.innerHTML = `
+                    <div class="character-header">
+                        <h3 class="character-name">${characterTemplate.name}</h3>
+                        <p class="character-title">${characterTemplate.title}</p>
+                    </div>
+                    <div class="character-body">
+                        <p class="character-description">${description}</p>
+                        <div class="voice-info">
+                            <span>Style: ${voice.style || 'N/A'}</span>
+                            <span class="voice-params">${voiceParams}</span>
+                        </div>
+                        <div>
+                            <p style="margin: 5px 0; color: #666;">Sample:</p>
+                            <audio controls src="${voice.file_path}"></audio>
+                            <p style="margin: 5px 0; font-style: italic; font-size: 0.9em;">"${voice.text || 'Sample text not available'}"</p>
+                        </div>
+                        <div class="tts-container">
+                            <p style="margin: 5px 0; color: #666;">Try with your own text:</p>
+                            <textarea class="tts-input" id="tts-input-${index}" placeholder="Enter text to generate speech..."></textarea>
+                            <button class="tts-btn" onclick="generateTTS('${voice.file_path}', document.getElementById('tts-input-${index}').value, ${index})">Generate Speech</button>
+                            <div class="tts-status" id="tts-status-${index}"></div>
+                            <audio controls id="tts-audio-${index}" style="display: none;"></audio>
+                        </div>
+                    </div>
+                `;
+                
+                grid.appendChild(card);
+                index++;
+            });
+        }
+        
+        // Filter functionality
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('apply-filters').addEventListener('click', function() {
+                const genderFilter = document.getElementById('gender-filter').value;
+                const styleFilter = document.getElementById('style-filter').value;
+                
+                const cards = document.querySelectorAll('.character-card');
+                cards.forEach(card => {
+                    const gender = card.dataset.gender;
+                    const style = card.dataset.style;
+                    
+                    const genderMatch = genderFilter === 'all' || gender === genderFilter;
+                    const styleMatch = styleFilter === 'all' || style === styleFilter;
+                    
+                    card.style.display = genderMatch && styleMatch ? 'block' : 'none';
+                });
+            });
+            
+            document.getElementById('reset-filters').addEventListener('click', function() {
+                document.getElementById('gender-filter').value = 'all';
+                document.getElementById('style-filter').value = 'all';
+                
+                const cards = document.querySelectorAll('.character-card');
+                cards.forEach(card => {
+                    card.style.display = 'block';
+                });
+            });
+            
+            // Load voice samples and populate characters
+            loadVoiceSamples().then(data => {
+                if (data) {
+                    populateCharacters(data);
+                }
+            });
+        });
+    </script>
+</body>
+</html>

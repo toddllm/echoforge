@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Audio URL Debug</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; max-width: 800px; margin: 0 auto; }
+        .test-card { border: 1px solid #ccc; padding: 15px; margin-bottom: 20px; border-radius: 5px; }
+        .success { color: green; font-weight: bold; }
+        .error { color: red; font-weight: bold; }
+        audio { width: 100%; margin: 10px 0; }
+        button { padding: 10px 15px; background: #4CAF50; color: white; border: none; cursor: pointer; border-radius: 4px; margin: 5px; }
+        pre { background: #f5f5f5; padding: 10px; overflow: auto; }
+        input { padding: 10px; width: 100%; margin: 5px 0; }
+        .log-entry { margin: 5px 0; border-bottom: 1px solid #eee; padding-bottom: 5px; }
+    </style>
+</head>
+<body>
+    <h1>EchoForge Audio URL Debug</h1>
+    <p>This page tests different ways of accessing audio files to diagnose 404 issues</p>
+    
+    <!-- Task ID Input and Button -->
+    <div class="test-card">
+        <h2>Test with Task ID</h2>
+        <p>Enter a task ID to test API response and audio playback:</p>
+        <input type="text" id="taskIdInput" placeholder="Enter task ID here" value="3fceb690-1995-4f8b-91c0-19a6d74678e1">
+        <button id="testApiBtn">Test API Response</button>
+        <button id="testDirectAudioBtn">Test Direct Audio Access</button>
+        <div id="apiLog"></div>
+    </div>
+    
+    <!-- API Test Results -->
+    <div class="test-card">
+        <h2>API Test Results</h2>
+        <div id="apiResult">
+            <p>No API results yet. Click "Test API Response" above.</p>
+        </div>
+        <h3>Audio from API Response</h3>
+        <audio id="apiAudio" controls></audio>
+        <div id="audioStatus"></div>
+    </div>
+    
+    <!-- Direct Access Test -->
+    <div class="test-card">
+        <h2>Direct Audio Access</h2>
+        <div id="directAccessResult">
+            <p>No direct access test yet. Click "Test Direct Audio Access" above.</p>
+        </div>
+        <h3>Audio from Direct Access</h3>
+        <audio id="directAudio" controls></audio>
+        <div id="directAudioStatus"></div>
+    </div>
+    
+    <!-- URL Construction Debug -->
+    <div class="test-card">
+        <h2>URL Construction Debug</h2>
+        <button id="testConstruction">Test URL Construction</button>
+        <pre id="constructionResult">Click to test various URL construction methods</pre>
+    </div>
+    
+    <script>
+        // Log function
+        function log(containerId, message, isError = false) {
+            const container = document.getElementById(containerId);
+            const entry = document.createElement('div');
+            entry.className = 'log-entry' + (isError ? ' error' : '');
+            entry.textContent = `${new Date().toLocaleTimeString()}: ${message}`;
+            container.appendChild(entry);
+        }
+        
+        // Function to test API and handle response
+        async function testApiResponse() {
+            const taskId = document.getElementById('taskIdInput').value.trim();
+            if (!taskId) {
+                log('apiLog', 'Please enter a task ID', true);
+                return;
+            }
+            
+            const apiResultContainer = document.getElementById('apiResult');
+            const audioElement = document.getElementById('apiAudio');
+            const audioStatusElement = document.getElementById('audioStatus');
+            
+            try {
+                log('apiLog', `Fetching status for task: ${taskId}`);
+                apiResultContainer.innerHTML = '<p>Fetching data...</p>';
+                
+                const response = await fetch(`/api/voice-cloning/status/${taskId}`);
+                const data = await response.json();
+                
+                // Display the full response
+                apiResultContainer.innerHTML = `<h3>API Response:</h3><pre>${JSON.stringify(data, null, 2)}</pre>`;
+                
+                // Process URLs
+                let resultUrl = null;
+                let messages = [];
+                
+                // Check for result_url
+                if (data.result_url) {
+                    resultUrl = data.result_url;
+                    messages.push(`Found result_url: ${resultUrl}`);
+                } else {
+                    messages.push('No result_url in response');
+                }
+                
+                // Check for audio_file
+                if (data.audio_file) {
+                    const constructedUrl = `/voices/${data.audio_file}`;
+                    messages.push(`Found audio_file: ${data.audio_file}`);
+                    messages.push(`Constructed URL: ${constructedUrl}`);
+                    
+                    if (!resultUrl) {
+                        resultUrl = constructedUrl;
+                        messages.push(`Using constructed URL as resultUrl`);
+                    }
+                } else {
+                    messages.push('No audio_file in response');
+                }
+                
+                // Fallback to task_id
+                if (!resultUrl && data.task_id) {
+                    resultUrl = `/voices/character_voice_${data.task_id}.wav`;
+                    messages.push(`Fallback: constructed URL from task_id: ${resultUrl}`);
+                }
+                
+                // Display messages
+                const messagesHtml = messages.map(msg => `<p>${msg}</p>`).join('');
+                apiResultContainer.innerHTML += `<h3>URL Processing:</h3>${messagesHtml}`;
+                
+                // Set audio source if we have a URL
+                if (resultUrl) {
+                    audioElement.src = resultUrl;
+                    audioStatusElement.innerHTML = `<p>Attempting to load audio from: ${resultUrl}</p>`;
+                    audioElement.load();
+                } else {
+                    audioStatusElement.innerHTML = '<p class="error">No valid URL found in response</p>';
+                }
+                
+                log('apiLog', `API test completed for task: ${taskId}`);
+            } catch (error) {
+                apiResultContainer.innerHTML = `<p class="error">Error: ${error.message}</p>`;
+                log('apiLog', `Error: ${error.message}`, true);
+            }
+        }
+        
+        // Function to test direct audio access
+        function testDirectAccess() {
+            const taskId = document.getElementById('taskIdInput').value.trim();
+            if (!taskId) {
+                log('apiLog', 'Please enter a task ID', true);
+                return;
+            }
+            
+            const directAudio = document.getElementById('directAudio');
+            const directAccessResult = document.getElementById('directAccessResult');
+            const directAudioStatus = document.getElementById('directAudioStatus');
+            
+            // Construct URL
+            const directUrl = `/voices/character_voice_${taskId}.wav`;
+            
+            log('apiLog', `Testing direct access to: ${directUrl}`);
+            directAccessResult.innerHTML = `<p>Testing direct access to:</p><pre>${directUrl}</pre>`;
+            
+            // Set audio source
+            directAudio.src = directUrl;
+            directAudioStatus.innerHTML = `<p>Attempting to load audio directly from: ${directUrl}</p>`;
+            directAudio.load();
+            
+            // Create a test link
+            const linkElement = document.createElement('p');
+            linkElement.innerHTML = `<a href="${directUrl}" target="_blank">Open in new tab</a>`;
+            directAccessResult.appendChild(linkElement);
+        }
+        
+        // Function to test URL construction methods
+        function testUrlConstruction() {
+            const taskId = document.getElementById('taskIdInput').value.trim() || 'example-task-id';
+            const constructionResult = document.getElementById('constructionResult');
+            
+            const audioFile = `character_voice_${taskId}.wav`;
+            
+            const constructions = [
+                { method: "From task_id", url: `/voices/character_voice_${taskId}.wav` },
+                { method: "From audio_file", url: `/voices/${audioFile}` },
+                { method: "Using API base", url: `/api/voice-cloning/audio/${taskId}` },
+                { method: "With hostname", url: `${window.location.origin}/voices/character_voice_${taskId}.wav` }
+            ];
+            
+            let output = `Testing construction methods with task_id: ${taskId}\n\n`;
+            
+            constructions.forEach(item => {
+                output += `${item.method}:\n${item.url}\n\n`;
+            });
+            
+            constructionResult.textContent = output;
+        }
+        
+        // Add error handlers for both audio elements
+        document.getElementById('apiAudio').addEventListener('error', function(e) {
+            document.getElementById('audioStatus').innerHTML = `<p class="error">Error loading audio: ${e.target.error?.message || 'Unknown error'}</p>`;
+            log('apiLog', `Audio error: ${e.target.error?.message || 'Unknown error'}`, true);
+        });
+        
+        document.getElementById('directAudio').addEventListener('error', function(e) {
+            document.getElementById('directAudioStatus').innerHTML = `<p class="error">Error loading audio: ${e.target.error?.message || 'Unknown error'}</p>`;
+            log('apiLog', `Direct audio error: ${e.target.error?.message || 'Unknown error'}`, true);
+        });
+        
+        // Add success handlers
+        document.getElementById('apiAudio').addEventListener('loadeddata', function() {
+            document.getElementById('audioStatus').innerHTML = `<p class="success">Audio loaded successfully!</p>`;
+            log('apiLog', 'API audio loaded successfully');
+        });
+        
+        document.getElementById('directAudio').addEventListener('loadeddata', function() {
+            document.getElementById('directAudioStatus').innerHTML = `<p class="success">Direct audio loaded successfully!</p>`;
+            log('apiLog', 'Direct audio loaded successfully');
+        });
+        
+        // Set up button click handlers
+        document.getElementById('testApiBtn').addEventListener('click', testApiResponse);
+        document.getElementById('testDirectAudioBtn').addEventListener('click', testDirectAccess);
+        document.getElementById('testConstruction').addEventListener('click', testUrlConstruction);
+    </script>
+</body>
+</html>

@@ -104,43 +104,67 @@ document.addEventListener('DOMContentLoaded', () => {
      */
     function setupEventListeners() {
         // Filter change events
-        if (genderFilter) genderFilter.addEventListener('change', updateCharacterGrid);
-        if (styleFilter) styleFilter.addEventListener('change', updateCharacterGrid);
-        if (searchFilter) searchFilter.addEventListener('input', updateCharacterGrid);
-        
-        // Modal events
-        if (closeModal) {
-            closeModal.addEventListener('click', () => {
-                if (modal) modal.style.display = 'none';
-                clearTaskCheckInterval();
-            });
+        if (genderFilter) {
+            genderFilter.addEventListener('change', updateCharacterGrid);
         }
         
-        if (window) {
-            window.addEventListener('click', (event) => {
-                if (event.target === modal) {
-                    modal.style.display = 'none';
-                    clearTaskCheckInterval();
+        if (styleFilter) {
+            styleFilter.addEventListener('change', updateCharacterGrid);
+        }
+        
+        if (searchFilter) {
+            searchFilter.addEventListener('input', updateCharacterGrid);
+        }
+        
+        // Modal close event
+        if (closeModal) {
+            closeModal.addEventListener('click', () => {
+                if (modal) {
+                    modal.classList.remove('active');
+                }
+                // Stop any playing audio
+                if (modalVoiceAudio) {
+                    modalVoiceAudio.pause();
                 }
             });
         }
         
-        // Range input value display
+        // Modal temperature slider
         if (modalTemperature && modalTemperatureValue) {
             modalTemperature.addEventListener('input', () => {
                 modalTemperatureValue.textContent = modalTemperature.value;
             });
         }
         
+        // Modal top-k slider
         if (modalTopK && modalTopKValue) {
             modalTopK.addEventListener('input', () => {
                 modalTopKValue.textContent = modalTopK.value;
             });
         }
         
-        // Generate button
+        // Modal generate button
         if (modalGenerateBtn) {
             modalGenerateBtn.addEventListener('click', generateVoice);
+        }
+        
+        // Copy link button
+        if (modalCopyLinkBtn) {
+            modalCopyLinkBtn.addEventListener('click', () => {
+                const url = modalCopyLinkBtn.dataset.url;
+                if (url) {
+                    navigator.clipboard.writeText(url)
+                        .then(() => {
+                            modalCopyLinkBtn.textContent = 'Copied!';
+                            setTimeout(() => {
+                                modalCopyLinkBtn.textContent = 'Copy Link';
+                            }, 2000);
+                        })
+                        .catch(err => {
+                            console.error('Error copying text: ', err);
+                        });
+                }
+            });
         }
     }
 
@@ -148,45 +172,48 @@ document.addEventListener('DOMContentLoaded', () => {
      * Update the character grid based on filters
      */
     function updateCharacterGrid() {
-        if (!characterGrid) return;
+        if (!characterGrid || !characters.length) return;
         
-        const gender = genderFilter ? genderFilter.value : 'all';
-        const style = styleFilter ? styleFilter.value : 'all';
-        const searchTerm = searchFilter ? searchFilter.value.toLowerCase() : '';
-        
-        // Clear the grid except for the template
-        characterGrid.innerHTML = '';
+        // Get filter values
+        const genderValue = genderFilter ? genderFilter.value : 'all';
+        const styleValue = styleFilter ? styleFilter.value : 'all';
+        const searchValue = searchFilter ? searchFilter.value.toLowerCase() : '';
         
         // Filter characters
         const filteredCharacters = characters.filter(character => {
             // Gender filter
-            if (gender !== 'all' && character.gender !== gender) {
+            if (genderValue !== 'all' && character.gender !== genderValue) {
                 return false;
             }
             
             // Style filter
-            if (style !== 'all' && character.style !== style) {
+            if (styleValue !== 'all' && character.style !== styleValue) {
                 return false;
             }
             
             // Search filter
-            if (searchTerm && !character.name.toLowerCase().includes(searchTerm)) {
+            if (searchValue && !character.name.toLowerCase().includes(searchValue)) {
                 return false;
             }
             
             return true;
         });
         
-        // Show message if no characters match filters
+        // Clear the grid
+        characterGrid.innerHTML = '';
+        
+        // Show no results message if needed
         if (filteredCharacters.length === 0) {
-            characterGrid.innerHTML = '<div class="no-results">No characters match your filters</div>';
+            characterGrid.innerHTML = '<div class="no-results">No characters found matching your criteria.</div>';
             return;
         }
         
-        // Create and append character cards
+        // Add character cards
         filteredCharacters.forEach(character => {
             const card = createCharacterCard(character);
-            if (card) characterGrid.appendChild(card);
+            if (card) {
+                characterGrid.appendChild(card);
+            }
         });
     }
 
@@ -197,90 +224,75 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!cardTemplate) return null;
         
         // Clone the template
-        const card = cardTemplate.content.cloneNode(true).querySelector('.character-card');
-        if (!card) return null;
+        const card = cardTemplate.content.cloneNode(true);
         
-        // Set data attributes
-        card.dataset.speakerId = character.speaker_id || '';
-        card.dataset.gender = character.gender || 'neutral';
-        card.dataset.style = character.style || 'default';
-        
-        // Set content
-        const avatar = card.querySelector('.character-avatar img');
-        if (avatar) {
-            avatar.src = character.image_url || '/static/images/placeholder.jpg';
-            avatar.alt = `${character.name || 'Character'} avatar`;
-            
-            // Add error handler for image loading
-            avatar.onerror = function() {
-                this.src = '/static/images/placeholder.jpg';
-                this.onerror = null; // Prevent infinite loop
-            };
-        }
-        
+        // Set card data
         const nameElement = card.querySelector('.character-name');
-        if (nameElement) nameElement.textContent = character.name || 'Unnamed Character';
-        
-        const descElement = card.querySelector('.character-description');
-        if (descElement) descElement.textContent = character.description || 'No description available';
-        
         const genderBadge = card.querySelector('.gender-badge');
-        if (genderBadge) {
-            const gender = character.gender || 'neutral';
-            genderBadge.textContent = gender.charAt(0).toUpperCase() + gender.slice(1);
-        }
-        
         const styleBadge = card.querySelector('.style-badge');
+        const avatar = card.querySelector('.character-avatar');
+        const playButton = card.querySelector('.play-sample');
+        const detailsButton = card.querySelector('.view-details');
+        
+        if (nameElement) {
+            nameElement.textContent = character.name;
+        }
+        
+        if (genderBadge) {
+            genderBadge.textContent = character.gender;
+            genderBadge.classList.add(`gender-${character.gender.toLowerCase()}`);
+        }
+        
         if (styleBadge) {
-            const style = character.style || 'default';
-            styleBadge.textContent = style.charAt(0).toUpperCase() + style.slice(1);
+            styleBadge.textContent = character.style;
+            styleBadge.classList.add(`style-${character.style.toLowerCase()}`);
         }
         
-        // Set up audio player
-        const audio = card.querySelector('audio');
-        if (audio) {
-            audio.src = character.sample_url || '';
+        if (avatar) {
+            avatar.src = character.image_url;
+            avatar.alt = `${character.name} avatar`;
+        }
+        
+        // Play button event
+        if (playButton && character.sample_url) {
+            const audio = new Audio(character.sample_url);
             
-            // Add error handler for audio loading
-            audio.onerror = function() {
-                console.warn(`Failed to load audio sample for ${character.name}`);
-                // Could set a default audio or disable the play button
-            };
-        }
-        
-        // Add event listeners
-        const playButton = card.querySelector('.play-sample-btn');
-        if (playButton && audio) {
-            playButton.addEventListener('click', () => {
-                const audioPlayer = card.querySelector('.audio-player');
-                if (!audioPlayer) return;
+            playButton.addEventListener('click', (e) => {
+                e.stopPropagation();
                 
-                if (audioPlayer.classList.contains('active')) {
-                    audioPlayer.classList.remove('active');
-                    audio.pause();
-                    audio.currentTime = 0;
-                } else {
-                    // Hide all other audio players
-                    document.querySelectorAll('.audio-player.active').forEach(player => {
-                        player.classList.remove('active');
-                        const playerAudio = player.querySelector('audio');
-                        if (playerAudio) {
-                            playerAudio.pause();
-                            playerAudio.currentTime = 0;
-                        }
+                // Toggle play/pause
+                if (audio.paused) {
+                    // Stop any other playing audio
+                    document.querySelectorAll('.play-sample').forEach(btn => {
+                        btn.classList.remove('playing');
                     });
                     
-                    audioPlayer.classList.add('active');
-                    audio.play().catch(err => {
-                        console.error('Error playing audio:', err);
-                    });
+                    audio.play();
+                    playButton.classList.add('playing');
+                    
+                    // Reset button when audio ends
+                    audio.onended = () => {
+                        playButton.classList.remove('playing');
+                    };
+                } else {
+                    audio.pause();
+                    audio.currentTime = 0;
+                    playButton.classList.remove('playing');
                 }
             });
         }
         
-        const generateButton = card.querySelector('.generate-btn');
-        if (generateButton) {
-            generateButton.addEventListener('click', () => {
+        // Details button event
+        if (detailsButton) {
+            detailsButton.addEventListener('click', () => {
+                openCharacterModal(character);
+            });
+        }
+        
+        // Make the entire card clickable
+        const cardElement = card.querySelector('.character-card');
+        if (cardElement) {
+            cardElement.addEventListener('click', () => {
                 openCharacterModal(character);
             });
         }
@@ -297,88 +309,115 @@ document.addEventListener('DOMContentLoaded', () => {
         // Set current speaker ID
         currentSpeakerId = character.speaker_id;
         
-        // Reset modal state
-        if (modalResult) {
-            modalResult.style.display = 'none';
-            modalResult.classList.remove('active');
+        // Set modal content
+        if (modalCharacterName) {
+            modalCharacterName.textContent = character.name;
         }
-        if (modalAudioPlayer) modalAudioPlayer.style.display = 'none';
-        if (modalText) modalText.value = '';
-        
-        // Set character details
-        if (modalCharacterName) modalCharacterName.textContent = character.name || 'Unnamed Character';
         
         if (modalCharacterAvatar) {
-            modalCharacterAvatar.src = character.image_url || '/static/images/placeholder.jpg';
-            modalCharacterAvatar.alt = `${character.name || 'Character'} avatar`;
-            
-            // Add error handler for image loading
-            modalCharacterAvatar.onerror = function() {
-                this.src = '/static/images/placeholder.jpg';
-                this.onerror = null; // Prevent infinite loop
-            };
+            modalCharacterAvatar.src = character.image_url;
+            modalCharacterAvatar.alt = `${character.name} avatar`;
         }
         
         if (modalCharacterDescription) {
-            modalCharacterDescription.textContent = character.description || 'No description available';
+            modalCharacterDescription.textContent = character.description;
         }
         
         if (modalGenderBadge) {
-            const gender = character.gender || 'neutral';
-            modalGenderBadge.textContent = gender.charAt(0).toUpperCase() + gender.slice(1);
+            modalGenderBadge.textContent = character.gender;
+            modalGenderBadge.className = 'badge gender-badge';
+            modalGenderBadge.classList.add(`gender-${character.gender.toLowerCase()}`);
         }
         
         if (modalStyleBadge) {
-            const style = character.style || 'default';
-            modalStyleBadge.textContent = style.charAt(0).toUpperCase() + style.slice(1);
+            modalStyleBadge.textContent = character.style;
+            modalStyleBadge.className = 'badge style-badge';
+            modalStyleBadge.classList.add(`style-${character.style.toLowerCase()}`);
         }
         
-        // Set default style
-        if (modalStyle) modalStyle.value = character.style || 'default';
+        // Reset generation UI
+        if (modalText) {
+            modalText.value = 'Hello, my name is ' + character.name + '. It\'s nice to meet you!';
+        }
         
-        // Show modal
-        modal.style.display = 'block';
+        if (modalTaskStatus) {
+            modalTaskStatus.textContent = '';
+            modalTaskStatus.classList.remove('error');
+        }
+        
+        if (modalAudioPlayer) {
+            modalAudioPlayer.style.display = 'none';
+        }
+        
+        if (modalVoiceAudio) {
+            modalVoiceAudio.src = '';
+        }
+        
+        if (modalResult) {
+            modalResult.classList.remove('active');
+        }
+        
+        if (modalGenerateBtn) {
+            modalGenerateBtn.disabled = false;
+            modalGenerateBtn.textContent = 'Generate Voice';
+        }
+        
+        // Show the modal
+        modal.classList.add('active');
     }
 
     /**
      * Generate a voice sample
      */
     async function generateVoice() {
-        if (!modalGenerateBtn || !modalText || !modalResult || !modalTaskStatus) return;
+        if (!currentSpeakerId || !modalText || !modalTaskStatus) return;
         
         const text = modalText.value.trim();
+        
         if (!text) {
-            alert('Please enter some text to generate');
+            modalTaskStatus.textContent = 'Please enter some text to generate';
+            modalTaskStatus.classList.add('error');
             return;
         }
         
-        // Get parameters
-        const temperature = modalTemperature ? parseFloat(modalTemperature.value) : 0.7;
-        const topK = modalTopK ? parseInt(modalTopK.value) : 50;
-        const style = modalStyle ? modalStyle.value : 'default';
+        // Disable the generate button
+        if (modalGenerateBtn) {
+            modalGenerateBtn.disabled = true;
+            modalGenerateBtn.textContent = 'Generating...';
+        }
         
-        // Disable generate button
-        modalGenerateBtn.disabled = true;
-        modalGenerateBtn.textContent = 'Generating...';
+        // Hide the audio player
+        if (modalAudioPlayer) {
+            modalAudioPlayer.style.display = 'none';
+        }
         
-        // Show result section
-        modalResult.style.display = 'block';
+        // Reset the result area
+        if (modalResult) {
+            modalResult.classList.remove('active');
+        }
+        
+        // Update status
         modalTaskStatus.textContent = 'Initializing...';
+        modalTaskStatus.classList.remove('error');
         
         try {
-            // Send request to API
-            const response = await fetch('/api/generate', {
+            // Prepare request data
+            const temperature = modalTemperature ? parseFloat(modalTemperature.value) : 0.5;
+            const topK = modalTopK ? parseInt(modalTopK.value) : 50;
+            const style = modalStyle ? modalStyle.value : 'default';
+            
+            // Get the reference audio for the current speaker
+            const referenceAudio = `/static/voices/speaker_${currentSpeakerId}_temp_${temperature}_topk_${topK}_${style}.wav`;
+            
+            // Create form data to send
+            const formData = new FormData();
+            formData.append('reference_audio', referenceAudio);
+            formData.append('text', text);
+            
+            // Send the request
+            const response = await fetch('/api/voice-cloning/generate-speech', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    text: text,
-                    speaker_id: currentSpeakerId || '1',
-                    temperature: temperature,
-                    top_k: topK,
-                    style: style
-                })
+                body: formData
             });
             
             if (!response.ok) {
@@ -386,23 +425,30 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             
             const data = await response.json();
+            console.log('Generate speech response:', data);
+            
+            // Get the task ID from the response
             currentTaskId = data.task_id;
             
-            // Start checking task status
+            if (!currentTaskId) {
+                throw new Error('No task ID returned from the server');
+            }
+            
+            // Update status
             modalTaskStatus.textContent = 'Processing...';
+            
+            // Start checking the task status
             startTaskCheck();
             
         } catch (error) {
             console.error('Error generating voice:', error);
-            if (modalTaskStatus) {
-                modalTaskStatus.textContent = `Error: ${error.message}`;
-                modalTaskStatus.classList.add('error');
-            }
+            modalTaskStatus.textContent = `Error: ${error.message}`;
+            modalTaskStatus.classList.add('error');
             
-            // Re-enable generate button
+            // Re-enable the generate button
             if (modalGenerateBtn) {
                 modalGenerateBtn.disabled = false;
-                modalGenerateBtn.textContent = 'Generate';
+                modalGenerateBtn.textContent = 'Try Again';
             }
         }
     }
@@ -411,26 +457,32 @@ document.addEventListener('DOMContentLoaded', () => {
      * Start checking task status
      */
     function startTaskCheck() {
+        // Clear any existing interval
         clearTaskCheckInterval();
         
+        // Start a new interval
         taskCheckInterval = setInterval(async () => {
             try {
                 await checkTaskStatus();
             } catch (error) {
                 console.error('Error checking task status:', error);
+                
+                // Update status
                 if (modalTaskStatus) {
                     modalTaskStatus.textContent = `Error: ${error.message}`;
                     modalTaskStatus.classList.add('error');
                 }
+                
+                // Clear the interval
                 clearTaskCheckInterval();
                 
                 // Re-enable generate button
                 if (modalGenerateBtn) {
                     modalGenerateBtn.disabled = false;
-                    modalGenerateBtn.textContent = 'Generate';
+                    modalGenerateBtn.textContent = 'Try Again';
                 }
             }
-        }, 2000);
+        }, 1000);
     }
 
     /**
@@ -439,72 +491,164 @@ document.addEventListener('DOMContentLoaded', () => {
     async function checkTaskStatus() {
         if (!currentTaskId) return;
         
-        const response = await fetch(`/api/tasks/${currentTaskId}`);
-        
-        if (!response.ok) {
-            throw new Error(`HTTP error! Status: ${response.status}`);
-        }
-        
-        const data = await response.json();
-        
-        if (!modalTaskStatus) return;
-        
-        // Update status
-        modalTaskStatus.textContent = data.status;
-        
-        // If task is complete
-        if (data.status === 'completed') {
-            clearTaskCheckInterval();
+        console.log(`Checking task status for task: ${currentTaskId}`);
+        try {
+            const response = await fetch(`/api/voice-cloning/status/${currentTaskId}`);
             
-            // Show audio player
-            if (modalAudioPlayer && modalVoiceAudio) {
-                modalAudioPlayer.style.display = 'block';
-                modalVoiceAudio.src = data.result_url;
-                modalVoiceAudio.load();
+            if (!response.ok) {
+                console.error(`HTTP error! Status: ${response.status}`);
                 
-                // Add error handler for audio loading
-                modalVoiceAudio.onerror = function() {
-                    console.error('Error loading generated audio');
-                    if (modalTaskStatus) {
-                        modalTaskStatus.textContent = 'Error loading audio';
-                        modalTaskStatus.classList.add('error');
+                // Handle the case where the task is not found (might be already completed)
+                if (response.status === 404) {
+                    console.log('Task not found, it might have been cleaned up after completion');
+                    
+                    // Try constructing the audio URL directly using the task ID
+                    const audioFile = `character_voice_${currentTaskId}.wav`;
+                    const directResultUrl = `/voices/${audioFile}`;
+                    console.log('Trying direct URL:', directResultUrl);
+                    
+                    // Test if the file exists by creating a test image request
+                    const testRequest = new Image();
+                    testRequest.onload = function() {
+                        console.log(`File exists at ${directResultUrl}`);
+                        completeTaskWithDirectUrl(directResultUrl, audioFile);
+                    };
+                    testRequest.onerror = function() {
+                        console.error(`File does not exist at ${directResultUrl}`);
+                        showTaskError('Task not found');
+                    };
+                    testRequest.src = directResultUrl;
+                    
+                    return; // Exit early, we're handling this case specially
+                }
+                
+                throw new Error(`HTTP error! Status: ${response.status}`);
+            }
+            
+            const data = await response.json();
+            console.log('Received task status data:', data);
+            
+            if (!modalTaskStatus) return;
+            
+            // Update status
+            modalTaskStatus.textContent = data.status;
+            
+            // If task is complete
+            if (data.status === 'completed') {
+                clearTaskCheckInterval();
+                
+                // Check for result URL in different possible locations in the response
+                let resultUrl = null;
+                
+                // Debug the response structure
+                console.log('Task completed. Full response:', JSON.stringify(data));
+                
+                // Try different possible structures - with enhanced debugging
+                console.log('Checking for audio URLs in data:', data);
+                
+                if (data.result_url && typeof data.result_url === 'string') {
+                    resultUrl = data.result_url;
+                    console.log('Found result_url directly in data:', resultUrl);
+                } else if (data.result && data.result.result_url && typeof data.result.result_url === 'string') {
+                    resultUrl = data.result.result_url;
+                    console.log('Found result_url in data.result:', resultUrl);
+                } else if (data.audio_file && typeof data.audio_file === 'string') {
+                    // Construct URL from audio_file
+                    resultUrl = `/voices/${data.audio_file}`;
+                    console.log('Constructed URL from audio_file:', resultUrl);
+                } else if (data.result && data.result.audio_file && typeof data.result.audio_file === 'string') {
+                    // Construct URL from result.audio_file
+                    resultUrl = `/voices/${data.result.audio_file}`;
+                    console.log('Constructed URL from result.audio_file:', resultUrl);
+                } else {
+                    // Last resort fallback - construct URL from task_id if present
+                    if (data.task_id && typeof data.task_id === 'string') {
+                        resultUrl = `/voices/character_voice_${data.task_id}.wav`;
+                        console.log('Constructed fallback URL from task_id:', resultUrl);
+                    } else {
+                        console.error('No usable audio information found in response');
                     }
-                };
-                
-                // Set download link
-                if (modalDownloadBtn && data.result_url) {
-                    modalDownloadBtn.href = data.result_url;
-                    modalDownloadBtn.download = `echoforge_${currentSpeakerId || 'voice'}_${Date.now()}.mp3`;
                 }
                 
-                // Set copy link data
-                if (modalCopyLinkBtn && data.result_url) {
-                    modalCopyLinkBtn.dataset.url = data.result_url;
+                // Show audio player
+                if (modalAudioPlayer && modalVoiceAudio) {
+                    modalAudioPlayer.style.display = 'block';
+                    
+                    if (!resultUrl) {
+                        console.error('Error: Could not determine audio URL from the API response');
+                        modalTaskStatus.textContent = 'Error: No audio URL provided';
+                        modalTaskStatus.classList.add('error');
+                    } else {
+                        console.log('Setting audio source to:', resultUrl);
+                        
+                        // Validate URL before setting
+                        if (resultUrl && resultUrl.startsWith('/voices/')) {
+                            modalVoiceAudio.src = resultUrl;
+                            modalVoiceAudio.load();
+                            console.log('Audio source set and loading');
+                        } else {
+                            console.error('Invalid URL format:', resultUrl);
+                            modalTaskStatus.textContent = 'Error: Invalid audio URL';
+                            modalTaskStatus.classList.add('error');
+                        }
+                    }
+                    
+                    // Add handlers for audio loading
+                    modalVoiceAudio.onerror = function() {
+                        console.error('Error loading generated audio');
+                        if (modalTaskStatus) {
+                            modalTaskStatus.textContent = 'Error loading audio';
+                            modalTaskStatus.classList.add('error');
+                        }
+                    };
+                    
+                    // Add success handler for audio loading
+                    modalVoiceAudio.onloadeddata = function() {
+                        console.log('✅ Audio loaded successfully:', modalVoiceAudio.src);
+                        if (modalTaskStatus) {
+                            modalTaskStatus.textContent = 'Audio loaded successfully';
+                            modalTaskStatus.classList.add('success');
+                        }
+                    };
+                    
+                    // Set download link
+                    if (modalDownloadBtn && resultUrl && resultUrl.startsWith('/voices/')) {
+                        modalDownloadBtn.href = resultUrl;
+                        modalDownloadBtn.download = `echoforge_${currentSpeakerId || 'voice'}_${Date.now()}.wav`;
+                    }
+                    
+                    // Set copy link data
+                    if (modalCopyLinkBtn && resultUrl && resultUrl.startsWith('/voices/')) {
+                        modalCopyLinkBtn.dataset.url = resultUrl;
+                    }
+                }
+                
+                // Add active class to result
+                if (modalResult) {
+                    modalResult.classList.add('active');
+                }
+                
+                // Re-enable generate button
+                if (modalGenerateBtn) {
+                    modalGenerateBtn.disabled = false;
+                    modalGenerateBtn.textContent = 'Generate Again';
+                }
+            } else if (data.status === 'failed') {
+                clearTaskCheckInterval();
+                
+                // Show error
+                modalTaskStatus.textContent = `Failed: ${data.error || 'Unknown error'}`;
+                modalTaskStatus.classList.add('error');
+                
+                // Re-enable generate button
+                if (modalGenerateBtn) {
+                    modalGenerateBtn.disabled = false;
+                    modalGenerateBtn.textContent = 'Try Again';
                 }
             }
-            
-            // Add active class to result
-            if (modalResult) {
-                modalResult.classList.add('active');
-            }
-            
-            // Re-enable generate button
-            if (modalGenerateBtn) {
-                modalGenerateBtn.disabled = false;
-                modalGenerateBtn.textContent = 'Generate Again';
-            }
-        } else if (data.status === 'failed') {
-            clearTaskCheckInterval();
-            
-            // Show error
-            modalTaskStatus.textContent = `Failed: ${data.error || 'Unknown error'}`;
-            modalTaskStatus.classList.add('error');
-            
-            // Re-enable generate button
-            if (modalGenerateBtn) {
-                modalGenerateBtn.disabled = false;
-                modalGenerateBtn.textContent = 'Try Again';
-            }
+        } catch (error) {
+            console.error('Error checking task status:', error);
+            showTaskError(error.message);
         }
     }
 
@@ -519,25 +663,83 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     /**
+     * Function to handle task completion when using a direct URL
+     */
+    function completeTaskWithDirectUrl(resultUrl, audioFile) {
+        clearTaskCheckInterval();
+        console.log('Completing task with direct URL:', resultUrl);
+        
+        // Show audio player
+        if (modalAudioPlayer && modalVoiceAudio) {
+            modalAudioPlayer.style.display = 'block';
+            modalVoiceAudio.src = resultUrl;
+            modalVoiceAudio.load();
+            
+            // Set download link
+            if (modalDownloadBtn) {
+                modalDownloadBtn.href = resultUrl;
+                modalDownloadBtn.download = `echoforge_${currentSpeakerId || 'voice'}_${Date.now()}.mp3`;
+            }
+            
+            // Set copy link data
+            if (modalCopyLinkBtn) {
+                modalCopyLinkBtn.dataset.url = resultUrl;
+            }
+        }
+        
+        // Update status
+        if (modalTaskStatus) {
+            modalTaskStatus.textContent = 'completed';
+        }
+        
+        // Add active class to result
+        if (modalResult) {
+            modalResult.classList.add('active');
+        }
+        
+        // Re-enable generate button
+        if (modalGenerateBtn) {
+            modalGenerateBtn.disabled = false;
+            modalGenerateBtn.textContent = 'Generate Again';
+        }
+    }
+
+    /**
+     * Show task error message
+     */
+    function showTaskError(message) {
+        if (modalTaskStatus) {
+            modalTaskStatus.textContent = `Error: ${message}`;
+            modalTaskStatus.classList.add('error');
+        }
+        
+        // Re-enable generate button
+        if (modalGenerateBtn) {
+            modalGenerateBtn.disabled = false;
+            modalGenerateBtn.textContent = 'Try Again';
+        }
+        
+        clearTaskCheckInterval();
+    }
+
+    /**
      * Copy URL to clipboard
      */
     if (modalCopyLinkBtn) {
         modalCopyLinkBtn.addEventListener('click', () => {
             const url = modalCopyLinkBtn.dataset.url;
-            if (!url) return;
-            
-            navigator.clipboard.writeText(url)
-                .then(() => {
-                    const originalText = modalCopyLinkBtn.textContent;
-                    modalCopyLinkBtn.textContent = 'Copied!';
-                    setTimeout(() => {
-                        modalCopyLinkBtn.textContent = originalText;
-                    }, 2000);
-                })
-                .catch(err => {
-                    console.error('Failed to copy URL:', err);
-                    alert('Failed to copy URL to clipboard');
-                });
+            if (url) {
+                navigator.clipboard.writeText(url)
+                    .then(() => {
+                        modalCopyLinkBtn.textContent = 'Copied!';
+                        setTimeout(() => {
+                            modalCopyLinkBtn.textContent = 'Copy Link';
+                        }, 2000);
+                    })
+                    .catch(err => {
+                        console.error('Error copying text: ', err);
+                    });
+            }
         });
     }
-}); 
+});
