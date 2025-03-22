@@ -1,21 +1,21 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>EchoForge Voice Character Showcase</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
     <style>
         body {
             font-family: 'Arial', sans-serif;
             max-width: 1200px;
             margin: 0 auto;
             padding: 20px;
-            background: #f5f5f5;
         }
         
         h1, h2 {
             text-align: center;
-            color: #333;
+            color: var(--text-color);
         }
         
         .character-grid {
@@ -26,9 +26,9 @@
         }
         
         .character-card {
-            background: white;
+            background: var(--card-bg);
             border-radius: 10px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            box-shadow: var(--box-shadow);
             overflow: hidden;
             transition: transform 0.3s ease;
         }
@@ -38,26 +38,26 @@
         }
         
         .male-card {
-            border-left: 5px solid #4a90e2;
+            border-left: 5px solid var(--primary-color);
         }
         
         .female-card {
-            border-left: 5px solid #e24a90;
+            border-left: 5px solid var(--accent-color);
         }
         
         .character-header {
             padding: 15px;
-            border-bottom: 1px solid #eee;
+            border-bottom: 1px solid var(--border-color);
         }
         
         .character-name {
             margin: 0;
-            color: #333;
+            color: var(--text-color);
         }
         
         .character-title {
             margin: 5px 0 0;
-            color: #666;
+            color: var(--text-secondary);
             font-style: italic;
         }
         
@@ -66,7 +66,7 @@
         }
         
         .character-description {
-            color: #555;
+            color: var(--text-secondary);
             margin-bottom: 15px;
         }
         
@@ -75,12 +75,12 @@
             justify-content: space-between;
             margin-bottom: 10px;
             font-size: 0.9em;
-            color: #666;
+            color: var(--text-secondary);
         }
         
         .voice-params {
             font-family: monospace;
-            background: #f0f0f0;
+            background: var(--input-bg);
             padding: 2px 5px;
             border-radius: 3px;
         }
@@ -93,7 +93,7 @@
         .tts-container {
             margin-top: 15px;
             padding-top: 15px;
-            border-top: 1px solid #eee;
+            border-top: 1px solid var(--border-color);
         }
         
         .tts-input {
@@ -101,14 +101,16 @@
             height: 80px;
             padding: 10px;
             box-sizing: border-box;
-            border: 1px solid #ddd;
+            border: 1px solid var(--border-color);
             border-radius: 4px;
+            background-color: var(--input-bg);
+            color: var(--text-color);
             resize: none;
             margin-bottom: 10px;
         }
         
         .tts-btn {
-            background: #4a90e2;
+            background: var(--primary-color);
             color: white;
             border: none;
             border-radius: 4px;
@@ -381,11 +383,11 @@
                 ]
             },
             { 
-                name: "Victoria Knight", 
+                name: "Alexander Mitchell", 
                 title: "Executive Assistant",
                 descriptions: [
-                    "Her efficient, professional demeanor inspires confidence.",
-                    "Clear and concise communication is her specialty.",
+                    "His efficient, professional demeanor inspires confidence.",
+                    "Clear and concise communication is his specialty.",
                     "The perfect voice for business and productivity applications."
                 ]
             }
