@@ -16,7 +16,7 @@ import os
 
 from app.db.models import User, UserProfile
 from app.db.session import get_db
-from app.core.security import get_password_hash
+from app.core.security import get_password_hash, validate_redirect_url
 from sqlalchemy.orm import Session
 
 from app.core import config
@@ -184,8 +184,11 @@ async def login(request: Request, db: Session = Depends(get_db)):
     # Extract query parameters for 'next' URL
     next_url = None
     if request.query_params and "next" in request.query_params:
-        next_url = request.query_params.get("next")
-        logger.info(f"Next URL from query params: {next_url}")
+        raw_next = request.query_params.get("next")
+        # Validate the next URL to prevent open redirect vulnerabilities
+        next_url = validate_redirect_url(raw_next)
+        logger.info(f"Next URL from query params (raw): {raw_next}")
+        logger.info(f"Next URL from query params (validated): {next_url}")
     
     # Force refresh test mode status to ensure latest environment variable is picked up
     if hasattr(test_mode, 'force_refresh'):
@@ -204,8 +207,11 @@ async def login(request: Request, db: Session = Depends(get_db)):
         
         # Check if 'next' is in form data and use it if present
         if "next" in form_dict and not next_url:
-            next_url = form_dict.get("next")
-            logger.info(f"Next URL from form data: {next_url}")
+            raw_next = form_dict.get("next")
+            # Validate the next URL to prevent open redirect vulnerabilities
+            next_url = validate_redirect_url(raw_next)
+            logger.info(f"Next URL from form data (raw): {raw_next}")
+            logger.info(f"Next URL from form data (validated): {next_url}")
             
         # Debug: Double-check next_url value at this point
         logger.info(f"Final next_url value after processing form data: {next_url}")
