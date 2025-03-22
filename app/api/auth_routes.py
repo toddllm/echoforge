@@ -28,33 +28,74 @@ logger = logging.getLogger("echoforge.api.auth")
 router = APIRouter(prefix="/api/auth", tags=["authentication"])
 
 @router.post("/login")
-async def login(form_data: OAuth2PasswordRequestForm = Depends(), request: Request = None):
+async def login(form_data: OAuth2PasswordRequestForm = Depends(), request: Request = None, db: Session = Depends(get_db)):
     """Login endpoint for form-based authentication."""
     logger.info(f"Login attempt for user: {form_data.username}")
     
-    # Skip verification in test mode
-    if os.environ.get("ECHOFORGE_TEST") == "true":
-        logger.info("Test mode - bypassing credential verification")
-        token = "dummy_token_" + secrets.token_hex(16)
-
-    # Create response with token
-    response = JSONResponse(content={
-        "access_token": token,
-        "token_type": "bearer",
-        "username": form_data.username,
-        "is_admin": True
-    })
-    
-    # Set session cookie
-    response.set_cookie(
-        key="echoforge_session",
-        value="session_" + secrets.token_hex(16),
-        httponly=True,
-        max_age=86400,  # 24 hours
-        secure=False  # Set to True in production with HTTPS
+    # Check test environment mode first
+    is_test_mode = os.environ.get("ECHOFORGE_TEST") == "true"
+    if is_test_mode:
+        logger.info("Test mode detected - will accept any credentials")
+        
+    # In test mode OR if credentials are correct
+    valid_login = is_test_mode or (
+        secrets.compare_digest(form_data.username, config.AUTH_USERNAME) and 
+        secrets.compare_digest(form_data.password, config.AUTH_PASSWORD)
     )
     
-    return response
+    if valid_login:
+        logger.info(f"{'Test mode - ' if is_test_mode else ''}Login successful for user: {form_data.username}")
+        token = "dummy_token_" + secrets.token_hex(16)
+        user_id = config.AUTH_USER_ID
+        
+        # Get next URL from query parameters
+        next_url = None
+        if request and hasattr(request, 'query_params'):
+            next_url = request.query_params.get('next')
+        
+        # Create a new session ID
+        session_id = "session_" + secrets.token_hex(16)
+        
+        # Get user's profile to fetch theme preference
+        user_profile = db.query(UserProfile).filter(UserProfile.user_id == user_id).first()
+        theme_preference = getattr(user_profile, 'theme_preference', config.DEFAULT_THEME)
+        
+        # Initialize session in the session store
+        if hasattr(request, 'state') and hasattr(request.state, 'session'):
+            session = request.state.session
+            session.is_authenticated = True
+            session.user_id = form_data.username
+            # Store theme preference in session
+            session.data['theme_preference'] = theme_preference
+            logger.info(f"Set theme preference in session: {theme_preference}")
+        else:
+            logger.warning("Could not access session in request state during login")
+        
+        # Create response with token
+        response = JSONResponse(content={
+            "access_token": token,
+            "token_type": "bearer",
+            "username": form_data.username,
+            "is_admin": True
+        })
+        
+        # Set session cookie
+        response.set_cookie(
+            key="echoforge_session",
+            value=session_id,
+            httponly=True,
+            max_age=86400,  # 24 hours
+            secure=False  # Set to True in production with HTTPS
+        )
+        
+        # If next URL is provided, return it in the response for client-side redirection
+        if next_url:
+            response.headers["X-Next-URL"] = next_url
+        
+        logger.info(f"Login successful for user: {form_data.username} with theme: {theme_preference}")
+        return response
+    
+    # For non-test mode, continue with normal authentication
     
     # Verify credentials against config
     correct_username = secrets.compare_digest(form_data.username, config.AUTH_USERNAME)
@@ -74,7 +115,31 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), request: Reque
     
     logger.info(f"Successful login for user: {form_data.username}")
     token = "dummy_token_" + secrets.token_hex(16)
+    user_id = config.AUTH_USER_ID
 
+    # Get next URL from query parameters
+    next_url = None
+    if request and hasattr(request, 'query_params'):
+        next_url = request.query_params.get('next')
+    
+    # Create a new session ID
+    session_id = "session_" + secrets.token_hex(16)
+    
+    # Get user's profile to fetch theme preference
+    user_profile = db.query(UserProfile).filter(UserProfile.user_id == user_id).first()
+    theme_preference = getattr(user_profile, 'theme_preference', config.DEFAULT_THEME)
+    
+    # Initialize session in the session store
+    if hasattr(request, 'state') and hasattr(request.state, 'session'):
+        session = request.state.session
+        session.is_authenticated = True
+        session.user_id = form_data.username
+        # Store theme preference in session
+        session.data['theme_preference'] = theme_preference
+        logger.info(f"Set theme preference in session: {theme_preference}")
+    else:
+        logger.warning("Could not access session in request state during login")
+    
     # Create response with token
     response = JSONResponse(content={
         "access_token": token,
@@ -86,12 +151,17 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), request: Reque
     # Set session cookie
     response.set_cookie(
         key="echoforge_session",
-        value="session_" + secrets.token_hex(16),
+        value=session_id,
         httponly=True,
         max_age=86400,  # 24 hours
         secure=False  # Set to True in production with HTTPS
     )
     
+    # If next URL is provided, return it in the response for client-side redirection
+    if next_url:
+        response.headers["X-Next-URL"] = next_url
+    
+    logger.info(f"Login successful for user: {form_data.username} with theme: {theme_preference}")
     return response
 
 @router.post("/logout")

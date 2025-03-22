@@ -23,8 +23,10 @@ This document contains essential information about developing and testing the Ec
 ### Session & Authentication
 
 - User sessions are managed through the `SessionMiddleware` in `app/core/session_middleware.py`
-- User profile data and theme preferences need to be loaded from the database and stored in the session
-- The theme preference field is named `theme_preference` in the database model but referenced inconsistently in templates
+- User profile data and theme preferences are stored in the `UserProfile` model with a `theme_preference` column
+- Theme preference is submitted via the profile form and properly updated in the database
+- Theme preferences are now loaded into the session during the login process in `app/api/auth_routes.py`
+- Theme preferences are stored in the session data dictionary under the key `theme_preference`
 
 ### Templates & Routing
 
@@ -44,6 +46,8 @@ This document contains essential information about developing and testing the Ec
    - Ensure theme preference is consistently named `theme_preference` in all code
    - The theme is set using `data-bs-theme` attribute on the html element
    - LocalStorage uses `theme_preference` key
+   - In UI routes, access theme preference using `session.data.get('theme_preference', config.DEFAULT_THEME)`
+   - The login process fetches theme preference from user profile and stores it in `session.data['theme_preference']`
 
 2. **Database Migration Issues**
    - If multiple migration heads exist, use `python -m alembic upgrade heads` (plural)

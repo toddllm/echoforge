@@ -54,7 +54,9 @@ async def dashboard_page(request: Request):
     # Get user details from session
     session = request.state.session
     user_display_name = getattr(session, 'first_name', username)
-    user_theme = getattr(session, 'theme_preference', 'dark')
+    # Access theme_preference from session data dictionary
+    user_theme = session.data.get('theme_preference', config.DEFAULT_THEME) if hasattr(session, 'data') else config.DEFAULT_THEME
+    logger.debug(f"Retrieved theme preference from session: {user_theme}")
     
     logger.info(f"Rendering dashboard for user: {username}")
     return templates.TemplateResponse(
@@ -79,7 +81,9 @@ async def generate_page(request: Request):
     
     # Get user theme preference from session
     session = request.state.session
-    user_theme = getattr(session, 'theme_preference', 'dark')
+    # Access theme_preference from session data dictionary
+    user_theme = session.data.get('theme_preference', config.DEFAULT_THEME) if hasattr(session, 'data') else config.DEFAULT_THEME
+    logger.debug(f"Retrieved theme preference from session: {user_theme}")
     
     logger.info("Rendering generation page")
     return templates.TemplateResponse(
@@ -110,7 +114,9 @@ async def characters_page(request: Request):
     # Get user details from session
     session = request.state.session
     user_display_name = getattr(session, 'first_name', username)
-    user_theme = getattr(session, 'theme_preference', 'dark')
+    # Access theme_preference from session data dictionary
+    user_theme = session.data.get('theme_preference', config.DEFAULT_THEME) if hasattr(session, 'data') else config.DEFAULT_THEME
+    logger.debug(f"Retrieved theme preference from session: {user_theme}")
     
     logger.info(f"Rendering character showcase page for user: {username}")
     return templates.TemplateResponse(
