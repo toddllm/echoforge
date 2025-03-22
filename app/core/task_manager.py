@@ -8,7 +8,9 @@ import logging
 import time
 import uuid
 import threading
-from typing import Dict, List, Any, Optional, TypedDict, Union
+import queue
+import traceback
+from typing import Dict, List, Any, Optional, TypedDict, Union, Callable
 
 from app.core import config
 
@@ -45,6 +47,12 @@ class TaskManager:
         self.tasks: Dict[str, TaskData] = {}
         self.max_tasks = max_tasks
         self.lock = threading.RLock()  # Reentrant lock for thread safety
+        
+        # Task processing infrastructure
+        self.task_queue = queue.Queue()
+        self.task_handlers: Dict[str, Callable] = {}
+        self.worker_thread = None
+        self.stop_event = threading.Event()
         
         logger.info("TaskManager initialized with max_tasks=%d", max_tasks)
     
@@ -256,6 +264,156 @@ class TaskManager:
         logger.info("Cleaned up %d old tasks", removed_count)
         return removed_count
 
+
+    def register_task_handler(self, task_type: str, handler_function: Callable) -> None:
+        """
+        Register a handler function for a specific task type.
+        
+        Args:
+            task_type: Type of task this handler processes
+            handler_function: Function to call when processing this task type
+        """
+        self.task_handlers[task_type] = handler_function
+        logger.info(f"Registered handler for task type: {task_type}")
+    
+    def start_worker(self) -> None:
+        """
+        Start the worker thread to process tasks in the background.
+        """
+        if self.worker_thread is not None and self.worker_thread.is_alive():
+            logger.warning("Worker thread is already running")
+            return
+            
+        self.stop_event.clear()
+        self.worker_thread = threading.Thread(
+            target=self._process_tasks, 
+            daemon=True,  # Make it a daemon so it doesn't block app shutdown
+            name="TaskManagerWorker"
+        )
+        self.worker_thread.start()
+        logger.info("Started task worker thread")
+    
+    def stop_worker(self) -> None:
+        """
+        Stop the worker thread.
+        """
+        if self.worker_thread is None or not self.worker_thread.is_alive():
+            logger.warning("Worker thread is not running")
+            return
+            
+        logger.info("Stopping task worker thread...")
+        self.stop_event.set()
+        self.worker_thread.join(timeout=5.0)  # Wait up to 5 seconds for thread to end
+        if self.worker_thread.is_alive():
+            logger.warning("Worker thread did not stop gracefully after timeout")
+        else:
+            logger.info("Worker thread stopped successfully")
+    
+    def enqueue_task(self, task_id: str) -> bool:
+        """
+        Add a task to the processing queue.
+        
+        Args:
+            task_id: The ID of the task to process
+            
+        Returns:
+            True if the task was queued, False otherwise
+        """
+        if not self.worker_thread or not self.worker_thread.is_alive():
+            logger.warning("Worker thread is not running, starting it now")
+            self.start_worker()
+            
+        with self.lock:
+            task = self.tasks.get(task_id)
+            if not task:
+                logger.warning(f"Cannot enqueue non-existent task: {task_id}")
+                return False
+                
+            task_type = task.get("task_type")
+            if task_type not in self.task_handlers:
+                logger.error(f"No handler registered for task type: {task_type}")
+                self.update_task(
+                    task_id, 
+                    status="failed", 
+                    error=f"No handler available for task type: {task_type}"
+                )
+                return False
+            
+            try:
+                self.task_queue.put(task_id, block=False)
+                self.update_task(task_id, status="queued", message="Task queued for processing")
+                logger.info(f"Enqueued task {task_id} for processing")
+                return True
+            except queue.Full:
+                logger.error(f"Task queue is full, couldn't enqueue task {task_id}")
+                self.update_task(
+                    task_id,
+                    status="failed",
+                    error="Task queue is full, try again later"
+                )
+                return False
+    
+    def _process_tasks(self) -> None:
+        """
+        Worker thread function that processes tasks from the queue.
+        """
+        logger.info("Task worker thread started")
+        while not self.stop_event.is_set():
+            try:
+                # Try to get a task, but don't block indefinitely
+                try:
+                    task_id = self.task_queue.get(block=True, timeout=1.0)
+                except queue.Empty:
+                    # No task available, just continue the loop
+                    continue
+                    
+                logger.info(f"Processing task {task_id} from queue")
+                
+                with self.lock:
+                    task = self.tasks.get(task_id)
+                    if not task:
+                        logger.warning(f"Task {task_id} not found in tasks dict")
+                        self.task_queue.task_done()
+                        continue
+                        
+                    task_type = task.get("task_type")
+                    if task_type not in self.task_handlers:
+                        logger.error(f"No handler for task type {task_type}")
+                        self.update_task(
+                            task_id,
+                            status="failed",
+                            error=f"No handler registered for task type: {task_type}"
+                        )
+                        self.task_queue.task_done()
+                        continue
+                    
+                    self.update_task(task_id, status="processing", message="Task processing started")
+                
+                # Get the handler for this task type
+                handler = self.task_handlers[task_type]
+                
+                # Run the handler
+                try:
+                    logger.info(f"Executing handler for task {task_id} (type: {task_type})")
+                    handler(task_id, task)
+                    logger.info(f"Handler for task {task_id} completed successfully")
+                except Exception as e:
+                    logger.error(f"Error processing task {task_id}: {str(e)}")
+                    logger.error(f"Traceback: {traceback.format_exc()}")
+                    self.update_task(
+                        task_id, 
+                        status="failed", 
+                        error=f"Error during task processing: {str(e)}"
+                    )
+                finally:
+                    self.task_queue.task_done()
+                    
+            except Exception as e:
+                logger.error(f"Unexpected error in task worker: {str(e)}")
+                logger.error(f"Traceback: {traceback.format_exc()}")
+                # Don't exit the loop, try to recover
+                
+        logger.info("Task worker thread exiting")
 
 # Create a singleton instance for application-wide use
 task_manager = TaskManager() 
