@@ -69,6 +69,36 @@ cleanup_gpu() {
     fi
 }
 
+# Function to ensure port 8765 is released
+release_port_8765() {
+    log "Ensuring port 8765 is released for stable server operation"
+    
+    # Check for processes using port 8765
+    if command -v lsof >/dev/null 2>&1; then
+        PORT_PROCESSES=$(lsof -i :8765 -t 2>/dev/null || true)
+        if [ -n "$PORT_PROCESSES" ]; then
+            log "Found processes using port 8765: $PORT_PROCESSES"
+            for pid in $PORT_PROCESSES; do
+                log "Terminating process $pid using port 8765"
+                kill -TERM $pid 2>/dev/null || kill -KILL $pid 2>/dev/null || true
+            done
+        else
+            log "No processes found directly using port 8765"
+        fi
+    else
+        log "lsof command not available, trying alternative methods"
+        # Alternative using netstat/ss
+        if command -v ss >/dev/null 2>&1; then
+            log "Checking socket connections on port 8765"
+            ss -tanp | grep 8765 >> "${LOG_FILE}" 2>&1 || true
+        fi
+    fi
+    
+    # Wait for socket cleanup
+    log "Waiting for socket cleanup..."
+    sleep 3
+}
+
 # Main shutdown sequence
 main() {
     log "Starting EchoForge shutdown sequence"
@@ -91,10 +121,13 @@ main() {
     kill_processes_by_pattern "echoforge" KILL
     sleep 1
     
-    # 4. Clean up GPU resources
+    # 4. Specifically ensure port 8765 is released
+    release_port_8765
+
+    # 5. Clean up GPU resources
     cleanup_gpu
     
-    # 5. Verify everything is stopped
+    # 6. Verify everything is stopped
     if pgrep -f "uvicorn.*app.main" >/dev/null 2>&1 || \
        pgrep -f "python.*app.main" >/dev/null 2>&1 || \
        pgrep -f "echoforge" >/dev/null 2>&1; then
