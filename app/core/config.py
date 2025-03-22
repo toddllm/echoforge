@@ -37,6 +37,9 @@ AUTH_REQUIRED_FOR_PUBLIC = os.environ.get("AUTH_REQUIRED_FOR_PUBLIC", "true").lo
 
 # Model settings
 MODEL_PATH = "/home/tdeshane/.cache/huggingface/hub/models--sesame--csm-1b/snapshots/03ab46ff5cfdcc783cc76fcf9ea6fd0838503093/ckpt.pt"
+VOICE_CLONER_MODEL_PATH = MODEL_PATH  # Use the same model path for voice cloning
+VOICE_ENCODER_MODEL_PATH = MODEL_PATH  # Use the same model path for voice encoding
+VOICE_FINE_TUNER_MODEL_PATH = MODEL_PATH  # Use the same model path for voice fine tuning
 
 # Direct CSM settings
 USE_DIRECT_CSM = os.environ.get("USE_DIRECT_CSM", "true").lower() == "true"  # Enable by default
