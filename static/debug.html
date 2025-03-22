@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Audio Debug</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .test-card { border: 1px solid #ccc; padding: 15px; margin-bottom: 15px; border-radius: 5px; }
+        audio { width: 100%; margin: 10px 0; }
+        button { padding: 8px 15px; background: #4CAF50; color: white; border: none; cursor: pointer; border-radius: 4px; }
+        pre { background: #f5f5f5; padding: 10px; overflow: auto; }
+    </style>
+</head>
+<body>
+    <h1>Audio Debug Page</h1>
+    
+    <div class="test-card">
+        <h2>Direct Audio Test</h2>
+        <p>Testing direct access to the audio file:</p>
+        <audio controls>
+            <source src="/voices/character_voice_dda4ed07-1d2e-4c79-92a5-394fc86e1539.wav" type="audio/wav">
+            Your browser does not support the audio element.
+        </audio>
+        <p><a href="/voices/character_voice_dda4ed07-1d2e-4c79-92a5-394fc86e1539.wav" target="_blank">Direct link to file</a></p>
+    </div>
+
+    <div class="test-card">
+        <h2>API Test</h2>
+        <p>Test the status API response:</p>
+        <button id="testApi">Test API</button>
+        <pre id="apiResult">API results will appear here...</pre>
+        <div id="audioPlayerContainer" style="display:none;">
+            <h3>API Audio Result:</h3>
+            <audio id="apiAudio" controls></audio>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('testApi').addEventListener('click', async function() {
+            const taskId = 'dda4ed07-1d2e-4c79-92a5-394fc86e1539';
+            const resultElement = document.getElementById('apiResult');
+            const audioElement = document.getElementById('apiAudio');
+            const audioContainer = document.getElementById('audioPlayerContainer');
+            
+            try {
+                resultElement.textContent = 'Fetching...';
+                const response = await fetch(`/api/voice-cloning/status/${taskId}`);
+                const data = await response.json();
+                
+                resultElement.textContent = JSON.stringify(data, null, 2);
+                
+                // Try different URL structures from the response
+                let audioUrl = null;
+                
+                if (data.result_url) {
+                    audioUrl = data.result_url;
+                    resultElement.textContent += `\n\nUsing result_url: ${audioUrl}`;
+                } else if (data.audio_file) {
+                    audioUrl = `/voices/${data.audio_file}`;
+                    resultElement.textContent += `\n\nConstructed URL from audio_file: ${audioUrl}`;
+                }
+                
+                if (audioUrl) {
+                    audioElement.src = audioUrl;
+                    audioContainer.style.display = 'block';
+                    
+                    // Add error handler
+                    audioElement.onerror = function() {
+                        resultElement.textContent += `\n\nError loading audio from: ${audioUrl}`;
+                    };
+                }
+            } catch (error) {
+                resultElement.textContent = `Error: ${error.message}`;
+            }
+        });
+    </script>
+</body>
+</html>

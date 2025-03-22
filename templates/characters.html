@@ -6,8 +6,50 @@
     <title>EchoForge - Character Showcase</title>
     <link rel="stylesheet" href="{{ url_for('static', path='/css/styles.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', path='/css/characters.css') }}">
-    <script src="{{ url_for('static', path='/js/main.js') }}" defer></script>
-    <script src="{{ url_for('static', path='/js/characters.js') }}" defer></script>
+    <!-- Audio fix script with cache busting -->
+    <script src="{{ url_for('static', path='/js/audio_fix.js') }}?v={{ config.VERSION or '1.0' }}-{{ current_time }}" defer></script>
+    <script src="{{ url_for('static', path='/js/main.js') }}?v={{ current_time }}" defer></script>
+    <script src="{{ url_for('static', path='/js/characters.js') }}?v={{ current_time }}" defer></script>
+    
+    <script>
+    // Inline fix for audio URL construction
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log('Inline audio fix loaded - ' + new Date().toISOString());
+        
+        // Watch for completed tasks and fix audio URLs
+        const originalFetch = window.fetch;
+        window.fetch = function(url, options) {
+            return originalFetch(url, options).then(response => {
+                if (typeof url === 'string' && url.includes('/api/voice-cloning/status/')) {
+                    response.clone().json().then(data => {
+                        if (data.status === 'completed') {
+                            setTimeout(() => {
+                                const audioEl = document.querySelector('#modal-voice-audio');
+                                if (audioEl && (!audioEl.src || audioEl.src === 'undefined')) {
+                                    let audioUrl = null;
+                                    
+                                    if (data.audio_file) {
+                                        audioUrl = `/voices/${data.audio_file}`;
+                                        console.log('Fixed: Using audio_file', audioUrl);
+                                    } else if (data.task_id) {
+                                        audioUrl = `/voices/character_voice_${data.task_id}.wav`;
+                                        console.log('Fixed: Using task_id fallback', audioUrl);
+                                    }
+                                    
+                                    if (audioUrl) {
+                                        audioEl.src = audioUrl;
+                                        audioEl.load();
+                                    }
+                                }
+                            }, 200);
+                        }
+                    }).catch(e => console.error('JSON parse error:', e));
+                }
+                return response;
+            });
+        };
+    });
+    </script>
 </head>
 <body>
     <header>
