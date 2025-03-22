@@ -30,12 +30,23 @@ except ImportError:
     task_manager = None
     
 from app.core.auth import auth_required
+from app.api.character_showcase_routes import router as character_showcase_router
+from app.api.voice_cloning_routes import router as voice_cloning_router
 
 # Setup logging
 logger = logging.getLogger(__name__)
 
 # Create router
 router = APIRouter(prefix=config.API_PREFIX, tags=config.API_TAGS)
+
+# Include character showcase routes first to give them higher priority
+# This will override any conflicting routes in voice_cloning_router
+logger.info("Including character showcase router in main API router")
+router.include_router(character_showcase_router)
+
+# Then include general voice cloning routes
+logger.info("Including voice cloning router in main API router")
+router.include_router(voice_cloning_router)
 
 
 @router.get("/health")

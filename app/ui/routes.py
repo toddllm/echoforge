@@ -56,13 +56,18 @@ async def generate_page(request: Request):
 async def characters_page(request: Request):
     """Render the character showcase page."""
     logger.info("Rendering character showcase page")
-    return templates.TemplateResponse(
-        "characters.html",
-        {
-            "request": request,
-            "default_theme": config.DEFAULT_THEME
-        }
-    )
+    # Serve the static HTML file directly
+    from fastapi.responses import FileResponse
+    return FileResponse("/home/tdeshane/echoforge/app/static/character_showcase.html")
+
+
+@router.get("/test", response_class=HTMLResponse)
+async def test_page(request: Request):
+    """Render the test page for verifying functionality."""
+    logger.info("Rendering test page")
+    # Serve the static HTML file directly
+    from fastapi.responses import FileResponse
+    return FileResponse("/home/tdeshane/echoforge/app/static/test_page.html")
 
 # Admin routes
 @router.get("/admin", response_class=HTMLResponse)
