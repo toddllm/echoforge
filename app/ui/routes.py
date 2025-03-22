@@ -12,7 +12,8 @@ from pathlib import Path
 import torch
 
 from app.core import config
-from app.core.auth import verify_credentials, auth_required
+from app.core.auth import auth_required, verify_session, verify_token
+from app.ui.auth_routes import router as auth_router
 
 # Configure logging
 logger = logging.getLogger("echoforge.ui")
@@ -20,20 +21,50 @@ logger = logging.getLogger("echoforge.ui")
 # Create router
 router = APIRouter(tags=["ui"])
 
+# Include authentication routes (these routes don't require authentication)
+router.include_router(auth_router)
+
 # Set up Jinja2 templates
 templates_dir = Path(__file__).parent.parent.parent / "templates"
 templates = Jinja2Templates(directory=templates_dir)
 
 
-@router.get("/", response_class=HTMLResponse)
-async def index(request: Request):
-    """Render the home page."""
-    logger.info("Rendering home page")
+# Remove this route as it conflicts with the main landing page in app/main.py
+# @router.get("/", response_class=HTMLResponse)
+# async def index(request: Request):
+#     """Render the home page or redirect appropriately."""
+#     # This route caused a redirect loop
+#     pass
+
+
+@router.get("/dashboard", response_class=HTMLResponse)
+async def dashboard_page(request: Request):
+    """Render the user dashboard page."""
+    # Apply authentication
+    auth_result = await auth_required(request)
+    
+    # If auth_result is a RedirectResponse, return it directly
+    if isinstance(auth_result, RedirectResponse):
+        return auth_result
+        
+    username = auth_result
+    if not username or username == "anonymous":
+        return RedirectResponse(url="/login?next=/dashboard", status_code=302)
+    
+    # Get user details from session
+    session = request.state.session
+    user_display_name = getattr(session, 'first_name', username)
+    user_theme = getattr(session, 'theme_preference', 'dark')
+    
+    logger.info(f"Rendering dashboard for user: {username}")
     return templates.TemplateResponse(
-        "index.html", 
+        "dashboard.html", 
         {
             "request": request,
-            "default_theme": config.DEFAULT_THEME
+            "username": user_display_name,
+            "page_title": "Dashboard | EchoForge",
+            "active_tab": "dashboard",
+            "default_theme": user_theme
         }
     )
 
@@ -41,13 +72,23 @@ async def index(request: Request):
 @router.get("/generate", response_class=HTMLResponse)
 async def generate_page(request: Request):
     """Render the generation page."""
+    # Apply authentication
+    username = await auth_required(request)
+    if not username or username == "anonymous":
+        return RedirectResponse(url="/login", status_code=302)
+    
+    # Get user theme preference from session
+    session = request.state.session
+    user_theme = getattr(session, 'theme_preference', 'dark')
+    
     logger.info("Rendering generation page")
     return templates.TemplateResponse(
         "generate.html", 
         {
             "request": request,
             "default_text": "Hello, this is a test of the voice generation system.",
-            "default_theme": config.DEFAULT_THEME
+            "default_theme": user_theme,
+            "active_tab": "generate"
         }
     )
 
@@ -55,15 +96,43 @@ async def generate_page(request: Request):
 @router.get("/characters", response_class=HTMLResponse)
 async def characters_page(request: Request):
     """Render the character showcase page."""
-    logger.info("Rendering character showcase page")
-    # Serve the static HTML file directly
-    from fastapi.responses import FileResponse
-    return FileResponse("/home/tdeshane/echoforge/app/static/character_showcase.html")
+    # Apply authentication
+    auth_result = await auth_required(request)
+    
+    # If auth_result is a RedirectResponse, return it directly
+    if isinstance(auth_result, RedirectResponse):
+        return auth_result
+        
+    username = auth_result
+    if not username or username == "anonymous":
+        return RedirectResponse(url="/login?next=/characters", status_code=302)
+    
+    # Get user details from session
+    session = request.state.session
+    user_display_name = getattr(session, 'first_name', username)
+    user_theme = getattr(session, 'theme_preference', 'dark')
+    
+    logger.info(f"Rendering character showcase page for user: {username}")
+    return templates.TemplateResponse(
+        "character_showcase.html", 
+        {
+            "request": request,
+            "username": user_display_name,
+            "page_title": "Characters | EchoForge",
+            "active_tab": "characters",
+            "default_theme": user_theme
+        }
+    )
 
 
 @router.get("/test", response_class=HTMLResponse)
 async def test_page(request: Request):
     """Render the test page for verifying functionality."""
+    # Apply authentication
+    username = await auth_required(request)
+    if not username or username == "anonymous":
+        return RedirectResponse(url="/login", status_code=302)
+    
     logger.info("Rendering test page")
     # Serve the static HTML file directly
     from fastapi.responses import FileResponse
@@ -71,7 +140,7 @@ async def test_page(request: Request):
 
 # Admin routes
 @router.get("/admin", response_class=HTMLResponse)
-async def admin_dashboard(request: Request, username: str = Depends(verify_credentials)):
+async def admin_dashboard(request: Request, username: str = Depends(verify_token)):
     """Render the admin dashboard page."""
     logger.info(f"Rendering admin dashboard for user: {username}")
     
@@ -124,7 +193,7 @@ async def admin_dashboard(request: Request, username: str = Depends(verify_crede
     )
 
 @router.get("/admin/models", response_class=HTMLResponse)
-async def admin_models(request: Request, username: str = Depends(verify_credentials)):
+async def admin_models(request: Request, username: str = Depends(verify_token)):
     """Render the admin models page."""
     logger.info(f"Rendering admin models page for user: {username}")
     
@@ -212,7 +281,7 @@ async def admin_models(request: Request, username: str = Depends(verify_credenti
     )
 
 @router.get("/admin/voices", response_class=HTMLResponse)
-async def admin_voices(request: Request, username: str = Depends(verify_credentials)):
+async def admin_voices(request: Request, username: str = Depends(verify_token)):
     """Render the admin voices page."""
     logger.info(f"Rendering admin voices page for user: {username}")
     
@@ -298,7 +367,7 @@ async def admin_voices(request: Request, username: str = Depends(verify_credenti
     )
 
 @router.get("/admin/tasks", response_class=HTMLResponse)
-async def admin_tasks(request: Request, username: str = Depends(verify_credentials)):
+async def admin_tasks(request: Request, username: str = Depends(verify_token)):
     """Render the admin tasks page."""
     logger.info(f"Rendering admin tasks page for user: {username}")
     
@@ -379,7 +448,7 @@ async def admin_tasks(request: Request, username: str = Depends(verify_credentia
     )
 
 @router.get("/admin/config", response_class=HTMLResponse)
-async def admin_config(request: Request, username: str = Depends(verify_credentials)):
+async def admin_config(request: Request, username: str = Depends(verify_token)):
     """Render the admin config page."""
     logger.info(f"Rendering admin config page for user: {username}")
     
@@ -420,7 +489,7 @@ async def admin_config(request: Request, username: str = Depends(verify_credenti
     )
 
 @router.get("/admin/logs", response_class=HTMLResponse)
-async def admin_logs(request: Request, username: str = Depends(verify_credentials)):
+async def admin_logs(request: Request, username: str = Depends(verify_token)):
     """Render the admin logs page."""
     logger.info(f"Rendering admin logs page for user: {username}")
     
