@@ -32,16 +32,24 @@ async def generate_v1(
     try:
         # Parse JSON from request
         json_data = await request.json()
+        logger.info(f"Received v1 API request: {json_data}")
+        
+        # Get speaker_id, ensure it's at least 1 (v1 API used 0-based indexing)
+        speaker_id = json_data.get("speaker_id", 1)
+        if speaker_id == 0:
+            speaker_id = 1  # Map speaker 0 to speaker 1 for compatibility
         
         # Map v1 request format to current format
         generation_request = VoiceGenerationRequest(
             text=json_data.get("text", ""),
-            speaker_id=json_data.get("speaker_id", 1),
+            speaker_id=speaker_id,
             temperature=json_data.get("temperature", 0.7),
             top_k=json_data.get("top_k", 50),
             style=json_data.get("style", "default"),
             device=json_data.get("device", "auto")
         )
+        
+        logger.info(f"Mapped to VoiceGenerationRequest: {generation_request}")
         
         # Call the current generate_voice function
         return await generate_voice(background_tasks, generation_request)
