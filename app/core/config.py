@@ -28,12 +28,8 @@ MAX_PORT_ATTEMPTS = 100
 DEFAULT_THEME = os.environ.get("DEFAULT_THEME", "light")  # Options: "light" or "dark"
 
 # Security settings
-ENABLE_AUTH = os.environ.get("ENABLE_AUTH", "false").lower() == "true"
 # Default username and password - should be changed in production!
-AUTH_USERNAME = os.environ.get("AUTH_USERNAME", "echoforge")
-AUTH_PASSWORD = os.environ.get("AUTH_PASSWORD", "changeme123")
 # If public serving is enabled, force authentication by default
-AUTH_REQUIRED_FOR_PUBLIC = os.environ.get("AUTH_REQUIRED_FOR_PUBLIC", "true").lower() == "true"
 
 # Model settings
 MODEL_PATH = "/home/tdeshane/.cache/huggingface/hub/models--sesame--csm-1b/snapshots/03ab46ff5cfdcc783cc76fcf9ea6fd0838503093/ckpt.pt"

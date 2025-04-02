@@ -12,7 +12,6 @@ from pathlib import Path
 import torch
 
 from app.core import config
-from app.core.auth import auth_required, verify_session, verify_token
 from app.ui.auth_routes import router as auth_router
 
 # Configure logging

@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EchoForge Test Page</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+        
+        .test-section {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        
+        button {
+            background: #4a90e2;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        
+        button:hover {
+            background: #357abd;
+        }
+        
+        .result {
+            margin-top: 10px;
+            padding: 10px;
+            background: #f0f0f0;
+            border-radius: 5px;
+            min-height: 20px;
+        }
+        
+        .success {
+            color: green;
+        }
+        
+        .error {
+            color: red;
+        }
+    </style>
+</head>
+<body>
+    <h1>EchoForge Test Page</h1>
+    
+    <div class="test-section">
+        <h2>API Health Check</h2>
+        <button id="test-health">Test API Health</button>
+        <div id="health-result" class="result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>Voice Samples Test</h2>
+        <button id="test-voice-samples">Test Voice Samples</button>
+        <div id="voice-samples-result" class="result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>Speech Generation Test</h2>
+        <p>This will test if the speech generation API is working correctly.</p>
+        <input type="text" id="test-text" value="This is a test of the speech generation API." style="width: 100%; padding: 8px; margin-bottom: 10px;">
+        <button id="test-speech">Generate Test Speech</button>
+        <div id="speech-result" class="result"></div>
+        <div id="audio-player" style="margin-top: 10px; display: none;">
+            <audio controls id="test-audio" style="width: 100%;"></audio>
+        </div>
+    </div>
+    
+    <script>
+        // API Health Check
+        document.getElementById('test-health').addEventListener('click', async function() {
+            const resultElement = document.getElementById('health-result');
+            resultElement.textContent = 'Testing API health...';
+            resultElement.className = 'result';
+            
+            try {
+                const response = await fetch('/api/health');
+                
+                if (!response.ok) {
+                    throw new Error(`API health check failed: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                resultElement.textContent = `Success! API is healthy. Version: ${data.version}`;
+                resultElement.className = 'result success';
+            } catch (error) {
+                resultElement.textContent = `Error: ${error.message}`;
+                resultElement.className = 'result error';
+            }
+        });
+        
+        // Voice Samples Test
+        document.getElementById('test-voice-samples').addEventListener('click', async function() {
+            const resultElement = document.getElementById('voice-samples-result');
+            resultElement.textContent = 'Testing voice samples...';
+            resultElement.className = 'result';
+            
+            try {
+                const response = await fetch('/static/voices/voice_samples.json');
+                
+                if (!response.ok) {
+                    throw new Error(`Failed to load voice samples: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                resultElement.textContent = `Success! Loaded ${data.total_count} voice samples (${data.male_count} male, ${data.female_count} female)`;
+                resultElement.className = 'result success';
+            } catch (error) {
+                resultElement.textContent = `Error: ${error.message}`;
+                resultElement.className = 'result error';
+            }
+        });
+        
+        // Speech Generation Test
+        document.getElementById('test-speech').addEventListener('click', async function() {
+            const resultElement = document.getElementById('speech-result');
+            const audioPlayer = document.getElementById('audio-player');
+            const audioElement = document.getElementById('test-audio');
+            const testText = document.getElementById('test-text').value;
+            
+            resultElement.textContent = 'Testing speech generation...';
+            resultElement.className = 'result';
+            audioPlayer.style.display = 'none';
+            
+            try {
+                // Get the first voice sample
+                const voiceResponse = await fetch('/static/voices/voice_samples.json');
+                
+                if (!voiceResponse.ok) {
+                    throw new Error(`Failed to load voice samples: ${voiceResponse.status}`);
+                }
+                
+                const voiceData = await voiceResponse.json();
+                
+                if (!voiceData.samples || voiceData.samples.length === 0) {
+                    throw new Error('No voice samples available');
+                }
+                
+                const firstVoice = voiceData.samples[0];
+                
+                // Generate speech using the first voice
+                const generateResponse = await fetch('/api/voice-cloning/generate-speech', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        reference_audio: firstVoice.file_path,
+                        text: testText
+                    })
+                });
+                
+                if (!generateResponse.ok) {
+                    throw new Error(`Speech generation request failed: ${generateResponse.status}`);
+                }
+                
+                const generateData = await generateResponse.json();
+                resultElement.textContent = `Speech generation initiated. Task ID: ${generateData.task_id}`;
+                
+                // Poll for status
+                let statusComplete = false;
+                let pollCount = 0;
+                const maxPolls = 60; // Maximum number of polls (30 seconds at 500ms intervals)
+                
+                while (!statusComplete && pollCount < maxPolls) {
+                    pollCount++;
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                    
+                    const statusResponse = await fetch(`/api/voice-cloning/status/${generateData.task_id}`);
+                    
+                    if (!statusResponse.ok) {
+                        throw new Error(`Status check failed: ${statusResponse.status}`);
+                    }
+                    
+                    const statusData = await statusResponse.json();
+                    
+                    if (statusData.status === 'completed') {
+                        resultElement.textContent = 'Speech generation completed successfully!';
+                        resultElement.className = 'result success';
+                        audioElement.src = statusData.audio_path;
+                        audioPlayer.style.display = 'block';
+                        statusComplete = true;
+                    } else if (statusData.status === 'failed') {
+                        throw new Error(`Speech generation failed: ${statusData.error}`);
+                    } else {
+                        resultElement.textContent = `Status: ${statusData.status}, Progress: ${statusData.progress}%, Message: ${statusData.message}`;
+                    }
+                }
+                
+                if (!statusComplete) {
+                    resultElement.textContent = 'Speech generation is taking longer than expected. Please check the task status later.';
+                }
+            } catch (error) {
+                resultElement.textContent = `Error: ${error.message}`;
+                resultElement.className = 'result error';
+            }
+        });
+    </script>
+</body>
+</html>
