@@ -25,10 +25,8 @@ to provide a starting point for voice synthesis.
 import os
 import sys
 import argparse
-import shutil
 import random
 import wave
-import struct
 import numpy as np
 from pathlib import Path
 
@@ -154,6 +152,7 @@ def create_voice_audio(filename, voice_config, sample_rate=22050):
     audio_data = np.clip(audio_data, -32767, 32767).astype(np.int16)
     
     # Create WAV file
+    os.makedirs(os.path.dirname(filename), exist_ok=True)
     with wave.open(filename, 'w') as wav_file:
         wav_file.setnchannels(1)  # Mono
         wav_file.setsampwidth(2)  # 16 bit
@@ -162,15 +161,6 @@ def create_voice_audio(filename, voice_config, sample_rate=22050):
     
     print(f"Created voice file: {filename}")
     return filename
-
-def copy_file_if_exists(src, dest):
-    """Copy a file if it exists, otherwise return False."""
-    if os.path.exists(src):
-        os.makedirs(os.path.dirname(dest), exist_ok=True)
-        shutil.copy2(src, dest)
-        print(f"Copied: {src} -> {dest}")
-        return True
-    return False
 
 def setup_directory_structure():
     """Create the necessary directory structure for voice files."""
@@ -189,6 +179,7 @@ def setup_directory_structure():
 
 def create_voice_metadata_file(voice_configs, output_path):
     """Create a metadata file with information about available voices."""
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
     with open(output_path, 'w') as f:
         f.write("# EchoForge Voice Metadata\n")
         f.write("# This file contains information about available voices\n\n")
@@ -226,6 +217,7 @@ def create_default_sample_texts():
     
     # Write sample texts to file
     output_path = "static/sample_texts.txt"
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
     with open(output_path, 'w') as f:
         f.write("# EchoForge Sample Texts\n")
         f.write("# Use these texts to test voice generation\n\n")
@@ -238,50 +230,31 @@ def create_default_sample_texts():
     
     print(f"Created sample texts file: {output_path}")
 
-def check_for_movie_maker_voices():
-    """
-    Check if movie_maker voice files exist and copy them if they do.
-    This helps reuse existing voice files from movie_maker if available.
-    """
-    # Potential source directories for voice files
-    source_dirs = [
-        "../movie_maker/hdmy5movie_voices/creative",
-        "../movie_maker/voices/creative",
-        "../../movie_maker/hdmy5movie_voices/creative",
-        "../../movie_maker/voices/creative",
-        "/home/tdeshane/movie_maker/hdmy5movie_voices/creative",
-        "/home/tdeshane/movie_maker/voices/creative"
-    ]
+def generate_voice_files(target_dir, voice_configs, force=False):
+    """Generate voice files for all configurations."""
+    print("Generating voice files...")
     
-    target_dir = "static/voices/creative"
-    voice_files_copied = False
-    
-    # Check each potential source directory
-    for source_dir in source_dirs:
-        if os.path.exists(source_dir):
-            print(f"Found movie_maker voice directory: {source_dir}")
+    # Create voice files for each configuration
+    for voice_config in voice_configs:
+        speaker_id = voice_config["id"]
+        voice_name = voice_config["name"].replace(" ", "_").lower()
+        
+        # Generate primary voice sample
+        primary_filename = os.path.join(target_dir, f"voice_{speaker_id}_{voice_name}.wav")
+        create_voice_audio(primary_filename, voice_config)
+        
+        # Generate alternative versions with slight variations for the same voice
+        for variant in range(1, 3):
+            variant_config = voice_config.copy()
+            variant_config["base_freq"] *= (1.0 + (random.random() - 0.5) * 0.05)  # ±2.5% variation
+            variant_config["formant_shift"] *= (1.0 + (random.random() - 0.5) * 0.05)
+            variant_config["duration"] += random.random() - 0.5  # ±0.5s variation
             
-            # Get all wav files
-            voice_files = [f for f in os.listdir(source_dir) if f.endswith('.wav')]
-            
-            if voice_files:
-                # Create target directory if it doesn't exist
-                os.makedirs(target_dir, exist_ok=True)
-                
-                # Copy voice files
-                for voice_file in voice_files:
-                    src = os.path.join(source_dir, voice_file)
-                    dest = os.path.join(target_dir, voice_file)
-                    shutil.copy2(src, dest)
-                    print(f"Copied voice file: {src} -> {dest}")
-                    voice_files_copied = True
-            
-            if voice_files_copied:
-                print(f"Successfully copied {len(voice_files)} voice files from movie_maker")
-                return True
-    
-    print("No existing movie_maker voice files found")
-    return False
+            variant_filename = os.path.join(
+                target_dir, 
+                f"voice_{speaker_id}_{voice_name}_variant{variant}.wav"
+            )
+            create_voice_audio(variant_filename, variant_config)
 
 def main():
     """Main function to set up voice files for EchoForge."""
@@ -305,34 +278,8 @@ def main():
         print(f"Found {len(existing_files)} existing voice files in {target_dir}")
         print("Using existing voice files. Use --force to regenerate.")
     else:
-        # First try to copy from movie_maker if available
-        voices_copied = check_for_movie_maker_voices()
-        
-        # If no voices were copied, generate new ones
-        if not voices_copied or args.force:
-            print("Generating new voice files...")
-            
-            # Create voice files for each configuration
-            for voice_config in VOICE_CONFIGS:
-                speaker_id = voice_config["id"]
-                voice_name = voice_config["name"].replace(" ", "_").lower()
-                
-                # Generate primary voice sample
-                primary_filename = os.path.join(target_dir, f"voice_{speaker_id}_{voice_name}.wav")
-                create_voice_audio(primary_filename, voice_config)
-                
-                # Generate alternative versions with slight variations for the same voice
-                for variant in range(1, 3):
-                    variant_config = voice_config.copy()
-                    variant_config["base_freq"] *= (1.0 + (random.random() - 0.5) * 0.05)  # ±2.5% variation
-                    variant_config["formant_shift"] *= (1.0 + (random.random() - 0.5) * 0.05)
-                    variant_config["duration"] += random.random() - 0.5  # ±0.5s variation
-                    
-                    variant_filename = os.path.join(
-                        target_dir, 
-                        f"voice_{speaker_id}_{voice_name}_variant{variant}.wav"
-                    )
-                    create_voice_audio(variant_filename, variant_config)
+        # Generate all voice files
+        generate_voice_files(target_dir, VOICE_CONFIGS, args.force)
     
     # Create metadata file
     create_voice_metadata_file(VOICE_CONFIGS, voice_metadata_path)

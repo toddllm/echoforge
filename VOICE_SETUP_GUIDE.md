@@ -200,14 +200,6 @@ For more control over generated voices, you can modify these parameters in `setu
 - **duration**: Length of the voice sample in seconds
 - **character_traits**: Descriptive tags for the voice
 
-### Integration with Movie Maker
-
-If you're using EchoForge alongside Movie Maker, the setup script will automatically detect and copy voices from:
-- `../movie_maker/hdmy5movie_voices/creative`
-- `../movie_maker/voices/creative`
-
-This provides consistency between the two systems.
-
 ### Using the Debug Page for Development
 
 The debug page is an invaluable tool for voice development:
@@ -219,6 +211,57 @@ The debug page is an invaluable tool for voice development:
 5. Test network connectivity to various endpoints
 
 This helps identify and fix issues in the voice generation pipeline.
+
+## Creating Your Own Voice Files
+
+If you want to create your own custom voice files, you have several options:
+
+### Option 1: Extending the setup script
+
+The easiest approach is to modify the `setup_voices.py` script by adding your own voice configurations:
+
+1. Open `setup_voices.py` in your editor
+2. Find the `VOICE_CONFIGS` list at the top of the file
+3. Add a new entry with your desired voice parameters:
+
+```python
+{
+    "id": 6,  # Use a unique ID
+    "name": "Your Voice Name",
+    "gender": "male",  # or "female" or "neutral"
+    "description": "Description of your voice",
+    "base_freq": 120.0,  # Adjust frequency (lower for deeper voices)
+    "formant_shift": 0.95,  # Adjust formant (affects voice quality)
+    "duration": 4.0,  # Duration in seconds
+    "character_traits": "your, voice, traits"
+}
+```
+
+4. Run the script with the `--force` flag to regenerate all voices:
+```bash
+python setup_voices.py --force
+```
+
+### Option 2: Manual voice recording
+
+For more realistic voices, you can record your own samples:
+
+1. Record a clear voice sample (3-5 seconds) with minimal background noise
+2. Save it as a WAV file with these specifications:
+   - 16-bit mono audio
+   - Sample rate of 22050Hz or higher
+   - Clear pronunciations with consistent volume
+
+3. Convert your recording to the required format (if needed):
+```bash
+ffmpeg -i your_recording.mp3 -ar 22050 -ac 1 -acodec pcm_s16le static/voices/creative/voice_6_custom_voice.wav
+```
+
+4. Follow the naming convention: `voice_ID_NAME.wav` where:
+   - `ID` is a unique number (start with 6 if using the default voices)
+   - `NAME` is a descriptive name with underscores instead of spaces
+
+5. Place the file in the `static/voices/creative` directory
 
 ---
 
