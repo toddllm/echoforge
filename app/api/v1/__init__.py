@@ -11,7 +11,7 @@ import logging
 from typing import Dict, Any, Optional
 import os
 
-from app.api.voice_routes import generate_voice, VoiceGenerationRequest
+from app.api.voice_routes import generate_voice, VoiceGenerationRequest, get_task_status
 
 # Setup logging
 logger = logging.getLogger("echoforge.api.v1")
@@ -58,4 +58,26 @@ async def generate_v1(
         return JSONResponse(
             status_code=500,
             content={"error": f"Failed to process request: {str(e)}"}
+        )
+
+# Define compatibility route for task status
+@router.get("/tasks/{task_id}")
+async def task_status_v1(task_id: str):
+    """
+    V1 compatibility route for checking task status.
+    Maps to the current task status endpoint.
+    """
+    try:
+        logger.info(f"Received v1 API task status request for task: {task_id}")
+        
+        # Call the current get_task_status function
+        result = await get_task_status(task_id)
+        
+        # Return the result as is
+        return result
+    except Exception as e:
+        logger.error(f"Error in v1 task status endpoint: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"Failed to get task status: {str(e)}"}
         ) 
