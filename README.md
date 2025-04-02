@@ -1,6 +1,13 @@
-# EchoForge
+# EchoForge - Voice Generation Platform
 
-EchoForge is a web application for generating character voices using deep learning models. It provides a simple interface for converting text to speech with various voice options.
+EchoForge is an advanced voice generation platform that allows you to create lifelike vocal content with customizable parameters.
+
+## 🚨 Debug Mode Available 🚨
+
+For troubleshooting API issues, a new debug page has been added. To access it:
+1. Start the server as described below
+2. Visit: `http://localhost:8765/debug`
+3. Use the debug interface to test different API endpoints and trace request/response flow
 
 ## Repository
 
@@ -55,245 +62,182 @@ curl -X POST http://localhost:8779/api/generate \
 
 ## Installation
 
-### Prerequisites
+### Option 1: Using uv (Recommended)
 
-- Python 3.8 or higher
-- [uv](https://github.com/astral-sh/uv) (recommended) or pip
+[uv](https://github.com/astral-sh/uv) is a faster, more reliable Python package installer and resolver.
 
-### Using uv (Recommended)
-
-EchoForge uses [uv](https://github.com/astral-sh/uv) for fast, reliable Python package management. To set up the environment with uv:
-
+1. Install uv:
 ```bash
-# Clone the repository
-git clone https://github.com/toddllm/echoforge.git
-cd echoforge
-
-# Run the setup script
-chmod +x setup_env.sh
-./setup_env.sh
+pip install uv
 ```
 
-The setup script will:
-1. Install uv if it's not already installed
-2. Create a virtual environment
-3. Install dependencies using `uv sync` (faster than pip)
-4. Create a default `.env.local` file for local configuration
-
-### Using pip
-
-If you prefer to use pip:
-
+2. Clone the repository:
 ```bash
-# Clone the repository
-git clone https://github.com/toddllm/echoforge.git
+git clone https://github.com/yourusername/echoforge.git
 cd echoforge
+```
 
-# Create a virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+3. Create a virtual environment and install dependencies:
+```bash
+uv venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+uv pip install -r requirements.txt
+```
 
-# Install dependencies
+### Option 2: Using pip
+
+1. Clone the repository:
+```bash
+git clone https://github.com/yourusername/echoforge.git
+cd echoforge
+```
+
+2. Create a virtual environment and install dependencies:
+```bash
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
 ## Configuration
 
-EchoForge can be configured using environment variables or `.env` files:
-
-- `.env` - Base environment configuration
-- `.env.local` - Local overrides (not committed to version control)
-
-### Environment Variables
-
-Key environment variables:
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `ALLOW_PUBLIC_SERVING` | Allow serving on all network interfaces | `false` |
-| `PUBLIC_HOST` | Host to bind when public serving is enabled | `0.0.0.0` |
-| `PORT` | Port to run the server on | `8765` |
-| `DEFAULT_THEME` | Default UI theme (light or dark) | `light` |
-| `ENABLE_AUTH` | Enable HTTP Basic authentication | `false` |
-| `AUTH_USERNAME` | Username for authentication | `echoforge` |
-| `AUTH_PASSWORD` | Password for authentication | `changeme123` |
-| `MODEL_PATH` | Path to the model checkpoint | `/path/to/model/checkpoint` |
-| `OUTPUT_DIR` | Directory to store generated voice files | `/tmp/echoforge/voices` |
-
-### Local Configuration
-
-For your local environment, you can create a `.env.local` file with your specific settings:
-
+1. Create a `.env` file in the project root with the following content:
 ```
-# Server settings
-ALLOW_PUBLIC_SERVING=true
-PUBLIC_HOST=0.0.0.0
-
-# Theme settings
-DEFAULT_THEME=dark
-
-# Authentication settings
-ENABLE_AUTH=true
-AUTH_USERNAME=your_username
-AUTH_PASSWORD=your_secure_password
+DEBUG=true
+HOST=0.0.0.0
+PORT=8765
+OUTPUT_DIR=./static/voices
+STATIC_DIR=./static
+TEMPLATES_DIR=./templates
 ```
 
-## Running the Application
+2. Configure voice directories:
+```bash
+# Create directories for voice data
+mkdir -p static/voices/creative
+```
 
-### Development Mode
+## Running the Server
+
+### Starting the Server
+
+Use the provided script to start the server:
 
 ```bash
-# Activate the virtual environment (if not already activated)
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-
-# Run the server
-./run_server.sh
+./start_server.sh
 ```
 
-The server will start on the configured host and port (default: http://127.0.0.1:8765).
-
-### Docker
-
-To run EchoForge in Docker:
+Or manually:
 
 ```bash
-# Build the Docker image
-docker build -t echoforge .
-
-# Run the container
-docker run -p 8765:8765 echoforge
+uvicorn run:app --host 0.0.0.0 --port 8765 --reload
 ```
 
-## API Documentation
+### Stopping the Server
 
-EchoForge provides a RESTful API for voice generation:
-
-### Endpoints
-
-#### Health Check
-
-```
-GET /api/health
-```
-
-Returns the status and version of the API.
-
-#### List Available Voices
-
-```
-GET /api/voices
-```
-
-Returns a list of available voice options.
-
-#### Generate Voice
-
-```
-POST /api/generate
-```
-
-Request body:
-```json
-{
-  "text": "Text to convert to speech",
-  "speaker_id": 1,
-  "temperature": 0.5,
-  "top_k": 80,
-  "style": "default"
-}
-```
-
-Returns a task ID for tracking the generation process.
-
-#### Get Task Status
-
-```
-GET /api/tasks/{task_id}
-```
-
-Returns the status of a voice generation task.
-
-## Development
-
-### Running Tests
+Use the provided script to stop the server:
 
 ```bash
-# Run all tests
-./run_tests.sh
+./stop_server.sh
 ```
 
-### Project Structure
+## Using the Debug Page
 
-- `app/` - Application code
-  - `api/` - API endpoints and voice generation
-  - `core/` - Core functionality and configuration
-  - `models/` - Model implementations including Direct CSM
-- `static/` - Static assets (CSS, JavaScript, images)
-- `templates/` - HTML templates
-- `tests/` - Test suite
-- `scripts/` - Utility scripts for testing and development
-- `docs/` - Documentation
+The debug page is a powerful tool for troubleshooting voice generation issues:
 
-## Roadmap
+1. Navigate to `http://localhost:8765/debug` in your browser
+2. The debug page provides:
+   - API selection between `/api/v1/generate` and `/api/voices/generate`
+   - Detailed request/response information
+   - Task ID validation and tracking
+   - Audio URL construction debugging
+   - Network connection testing
 
-Here are our development milestones for EchoForge:
+### Debug Page Features
 
-### Milestone 1: Enhanced Voice Generation
+- **API Version Selection**: Test both API versions to identify compatibility issues
+- **Parameter Controls**: Adjust voice generation parameters like temperature and top-k
+- **Request Inspection**: View the exact request payload being sent
+- **Response Monitoring**: See the raw response and parsed data
+- **Status Checking**: Monitor the task progress through different endpoints
+- **URL Validation**: Troubleshoot issues with audio URL construction
+- **Network Testing**: Test if endpoints are accessible and responding
 
-- [x] Direct CSM implementation for improved voice quality
-- [ ] Voice fine-tuning interface for creating custom character voices
-- [ ] Batch processing for generating multiple voice clips at once
-- [ ] Improved voice style controls (emotion, pace, emphasis)
-- [ ] Enhanced audio playback controls (speed, pitch adjustment)
+## API Endpoints
 
-### Milestone 2: User Experience & Management
+### Voice Generation
 
-- [ ] User accounts and voice library management
-- [ ] Project organization for managing multiple voice generation tasks
-- [ ] Improved UI with customizable workspace
-- [ ] Export options for various audio formats and quality settings
-- [ ] Usage analytics and generation history
+- `POST /api/v1/generate`: Generate voice using API v1
+  ```json
+  {
+    "text": "Text to convert to speech",
+    "speaker_id": 1,
+    "temperature": 0.7,
+    "top_k": 50,
+    "device": "auto"
+  }
+  ```
 
-### Milestone 3: Advanced Voice Features
+- `POST /api/voices/generate`: Generate voice using voices API
+  ```json
+  {
+    "text": "Text to convert to speech",
+    "speaker_id": 1,
+    "temperature": 0.7,
+    "top_k": 50,
+    "device": "auto"
+  }
+  ```
 
-- [ ] Voice cloning from sample audio
-- [ ] Multi-speaker conversation generation
-- [ ] Context-aware voice continuity between generations
-- [ ] Advanced audio post-processing options
-- [ ] Voice style transfer between characters
+### Task Status
 
-### Milestone 4: Ecosystem Integration
+- `GET /api/v1/tasks/{task_id}`: Check task status with API v1
+- `GET /api/voices/tasks/{task_id}`: Check task status with voices API
 
-- [ ] Integration with popular content creation tools
-- [ ] Mobile application for on-the-go voice generation
-- [ ] API marketplace for voice models and styles
-- [ ] Plugin system for extending functionality
-- [ ] Integration with virtual production pipelines
+### Voice Listing
+
+- `GET /api/voices`: Get list of available voices
+- `GET /api/voices/list`: Alternative endpoint for voice listing
+
+## Troubleshooting
+
+### Common Issues
+
+1. **"GET http://localhost:8765/undefined 404 (Not Found)"**
+   - This indicates an issue with audio URL construction
+   - Use the debug page to trace the URL construction process
+   - Ensure task IDs are properly validated
+
+2. **Speaker ID validation errors**
+   - If using `speaker_id: 0`, the system will automatically map to `speaker_id: 1`
+   - Verify speaker IDs in the range 1-5 are available
+
+3. **API endpoint not found**
+   - The system supports both `/api/v1/generate` and `/api/voices/generate`
+   - Use the debug page to test which endpoint is working
+   - Check for typos in endpoint URLs
+
+4. **Voice files not playing**
+   - Ensure the `static/voices/creative` directory contains voice files
+   - Check the audio URL construction in the debug logs
+   - Verify file permissions on the voice files
+
+### Using the Debug Console
+
+The debug page contains a JavaScript console that provides detailed logging:
+
+1. Open your browser's developer tools (F12 or right-click -> Inspect)
+2. Navigate to the Console tab
+3. Look for errors or warnings related to API calls
+4. The debug page will also display detailed logs in its interface
 
 ## Contributing
 
-We welcome contributions to EchoForge! Here are some areas where help is needed:
-
-- Adding new voice models and styles
-- Improving the web interface
-- Enhancing documentation
-- Writing tests
-- Performance optimization
-
-Please see our [Contributing Guidelines](CONTRIBUTING.md) for more information.
-
-## Ethical Use
-
-EchoForge is designed for creative and legitimate use cases. Please use this technology responsibly:
-
-- Always disclose when audio is AI-generated when appropriate
-- Do not use for impersonation without explicit consent
-- Respect copyright and intellectual property rights
-- Follow applicable laws and regulations regarding synthetic media
+Please read [CONTRIBUTING.md](CONTRIBUTING.md) for details on our code of conduct and the process for submitting pull requests.
 
 ## License
 
-[MIT License](LICENSE)
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## Acknowledgements
 

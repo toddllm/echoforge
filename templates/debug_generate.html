@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EchoForge Debug</title>
+    <style>
+        body {
+            font-family: monospace;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        
+        h1, h2, h3 {
+            margin-top: 1.5em;
+        }
+        
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        
+        .debug-log {
+            background: #222;
+            color: #7f7;
+            padding: 10px;
+            border-radius: 5px;
+            max-height: 300px;
+            overflow-y: auto;
+            margin-bottom: 20px;
+            white-space: pre-wrap;
+        }
+        
+        .error {
+            color: #f77;
+        }
+        
+        .warning {
+            color: #ff7;
+        }
+        
+        .info {
+            color: #7ff;
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        
+        input, textarea, select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+        
+        textarea {
+            height: 100px;
+        }
+        
+        button {
+            background: #4a90e2;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        
+        button:hover {
+            background: #357ae8;
+        }
+        
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        
+        .data-display {
+            background: #f7f7f7;
+            padding: 10px;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+            margin-bottom: 15px;
+            white-space: pre-wrap;
+            overflow-x: auto;
+        }
+        
+        audio {
+            width: 100%;
+            margin: 10px 0;
+        }
+        
+        .debug-controls {
+            margin-top: 20px;
+        }
+        
+        .debug-controls button {
+            margin-right: 10px;
+            background: #333;
+        }
+        
+        .debug-controls button:hover {
+            background: #555;
+        }
+        
+        hr {
+            margin: 30px 0;
+            border: 0;
+            height: 1px;
+            background: #ddd;
+        }
+    </style>
+</head>
+<body>
+    <h1>EchoForge Debug Page</h1>
+    <p>This page provides extensive debugging information for voice generation.</p>
+    
+    <div class="container">
+        <h2>Voice Generation Form</h2>
+        <div class="debug-log" id="pre-generate-log">// Pre-generation debugging info will appear here</div>
+        
+        <form id="debug-voice-form">
+            <div class="form-group">
+                <label for="text">Text to Convert:</label>
+                <textarea id="text" name="text" required>This is a test of the debug voice generation system.</textarea>
+            </div>
+            
+            <div class="form-group">
+                <label for="speaker_id">Speaker ID:</label>
+                <select id="speaker_id" name="speaker_id">
+                    <option value="1">Speaker 1</option>
+                    <option value="2">Speaker 2</option>
+                    <option value="3">Speaker 3</option>
+                    <option value="4">Speaker 4</option>
+                    <option value="5">Speaker 5</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label for="temperature">Temperature: <span id="temperature-value">0.7</span></label>
+                <input type="range" id="temperature" name="temperature" min="0.1" max="1.0" step="0.1" value="0.7">
+            </div>
+            
+            <div class="form-group">
+                <label for="top_k">Top-K: <span id="top_k-value">50</span></label>
+                <input type="range" id="top_k" name="top_k" min="10" max="100" step="10" value="50">
+            </div>
+            
+            <div class="form-group">
+                <label for="api_version">API Version:</label>
+                <select id="api_version" name="api_version">
+                    <option value="auto">Auto-detect</option>
+                    <option value="voices">voices (/api/voices/generate)</option>
+                    <option value="v1">v1 (/api/v1/generate)</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label for="endpoint_override">Override Endpoint (empty for default):</label>
+                <input type="text" id="endpoint_override" name="endpoint_override" placeholder="Leave empty to use default endpoint">
+            </div>
+            
+            <button type="submit" id="generate-btn">Generate Voice</button>
+        </form>
+    </div>
+    
+    <div class="container">
+        <h2>Request Details</h2>
+        <div class="debug-log" id="request-log">// Request information will appear here</div>
+        
+        <h3>Request Data:</h3>
+        <div class="data-display" id="request-data">// Request JSON data will appear here</div>
+    </div>
+    
+    <div class="container">
+        <h2>Response Details</h2>
+        <div class="debug-log" id="response-log">// Response information will appear here</div>
+        
+        <h3>Response Data:</h3>
+        <div class="data-display" id="response-data">// Response JSON data will appear here</div>
+    </div>
+    
+    <div class="container">
+        <h2>Task Status</h2>
+        <div class="debug-log" id="task-log">// Task status information will appear here</div>
+        
+        <div class="form-group">
+            <label for="task_id">Task ID:</label>
+            <input type="text" id="task_id" readonly>
+        </div>
+        
+        <button id="check-status-btn" disabled>Check Status Manually</button>
+        <button id="auto-refresh-btn">Auto Refresh</button>
+        <span id="refresh-status"></span>
+        
+        <h3>Task Status Data:</h3>
+        <div class="data-display" id="task-data">// Task status JSON data will appear here</div>
+    </div>
+    
+    <div class="container">
+        <h2>Audio Output</h2>
+        <div class="debug-log" id="audio-log">// Audio information will appear here</div>
+        
+        <div id="audio-player" style="display: none;">
+            <audio id="voice-audio" controls></audio>
+            
+            <div class="form-group">
+                <label for="audio_url">Audio URL:</label>
+                <input type="text" id="audio_url" readonly>
+            </div>
+            
+            <div class="form-group">
+                <label for="full_url">Full URL:</label>
+                <input type="text" id="full_url" readonly>
+            </div>
+            
+            <button id="download-btn">Download Audio</button>
+            <button id="copy-link-btn">Copy Link</button>
+        </div>
+    </div>
+    
+    <div class="container">
+        <h2>Debug Tools</h2>
+        <div class="debug-controls">
+            <button id="clear-logs-btn">Clear All Logs</button>
+            <button id="test-urls-btn">Test URLs</button>
+            <button id="check-network-btn">Check Network</button>
+        </div>
+        
+        <h3>Browser Information:</h3>
+        <div class="data-display" id="browser-info">// Browser information will appear here</div>
+        
+        <h3>Network Status:</h3>
+        <div class="data-display" id="network-status">// Network status will appear here</div>
+    </div>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // DOM Elements
+            const debugVoiceForm = document.getElementById('debug-voice-form');
+            const generateBtn = document.getElementById('generate-btn');
+            const speakerSelect = document.getElementById('speaker_id');
+            const temperatureSlider = document.getElementById('temperature');
+            const temperatureValue = document.getElementById('temperature-value');
+            const topKSlider = document.getElementById('top_k');
+            const topKValue = document.getElementById('top_k-value');
+            const checkStatusBtn = document.getElementById('check-status-btn');
+            const autoRefreshBtn = document.getElementById('auto-refresh-btn');
+            const refreshStatus = document.getElementById('refresh-status');
+            const taskIdInput = document.getElementById('task_id');
+            const audioPlayer = document.getElementById('audio-player');
+            const voiceAudio = document.getElementById('voice-audio');
+            const audioUrlInput = document.getElementById('audio_url');
+            const fullUrlInput = document.getElementById('full_url');
+            const downloadBtn = document.getElementById('download-btn');
+            const copyLinkBtn = document.getElementById('copy-link-btn');
+            const clearLogsBtn = document.getElementById('clear-logs-btn');
+            const testUrlsBtn = document.getElementById('test-urls-btn');
+            const checkNetworkBtn = document.getElementById('check-network-btn');
+            const apiVersionSelect = document.getElementById('api_version');
+            const endpointOverride = document.getElementById('endpoint_override');
+            
+            // Debug Logs
+            const preGenerateLog = document.getElementById('pre-generate-log');
+            const requestLog = document.getElementById('request-log');
+            const responseLog = document.getElementById('response-log');
+            const taskLog = document.getElementById('task-log');
+            const audioLog = document.getElementById('audio-log');
+            
+            // Data Displays
+            const requestData = document.getElementById('request-data');
+            const responseData = document.getElementById('response-data');
+            const taskData = document.getElementById('task-data');
+            const browserInfo = document.getElementById('browser-info');
+            const networkStatus = document.getElementById('network-status');
+            
+            // Variables
+            let currentTaskId = null;
+            let statusRefreshInterval = null;
+            let isAutoRefreshing = false;
+            
+            // Helper Functions
+            function logToElement(element, message, type = 'info') {
+                const now = new Date().toISOString();
+                const line = `[${now}] [${type.toUpperCase()}] ${message}`;
+                element.innerHTML += line + '\n';
+                element.scrollTop = element.scrollHeight;
+                console.log(`${type.toUpperCase()}: ${message}`);
+            }
+            
+            function clearLog(element) {
+                element.innerHTML = '';
+            }
+            
+            function formatJson(obj) {
+                try {
+                    return JSON.stringify(obj, null, 2);
+                } catch (error) {
+                    return `Error formatting JSON: ${error.message}`;
+                }
+            }
+            
+            function setData(element, data) {
+                element.textContent = formatJson(data);
+            }
+            
+            // Initialize Browser Info
+            setData(browserInfo, {
+                userAgent: navigator.userAgent,
+                platform: navigator.platform,
+                language: navigator.language,
+                cookiesEnabled: navigator.cookieEnabled,
+                windowSize: `${window.innerWidth}x${window.innerHeight}`,
+                screenSize: `${screen.width}x${screen.height}`,
+                origin: window.location.origin,
+                host: window.location.host,
+                protocol: window.location.protocol
+            });
+            
+            // Initialize Network Status
+            function updateNetworkStatus() {
+                setData(networkStatus, {
+                    online: navigator.onLine,
+                    timestamp: new Date().toISOString()
+                });
+            }
+            updateNetworkStatus();
+            
+            // Event Listeners
+            if (debugVoiceForm) debugVoiceForm.addEventListener('submit', handleFormSubmit);
+            if (temperatureSlider) temperatureSlider.addEventListener('input', updateTemperatureValue);
+            if (topKSlider) topKSlider.addEventListener('input', updateTopKValue);
+            if (checkStatusBtn) checkStatusBtn.addEventListener('click', () => checkTaskStatus(true));
+            if (autoRefreshBtn) autoRefreshBtn.addEventListener('click', toggleAutoRefresh);
+            if (downloadBtn) downloadBtn.addEventListener('click', downloadAudio);
+            if (copyLinkBtn) copyLinkBtn.addEventListener('click', copyAudioLink);
+            if (clearLogsBtn) clearLogsBtn.addEventListener('click', clearAllLogs);
+            if (testUrlsBtn) testUrlsBtn.addEventListener('click', testUrls);
+            if (checkNetworkBtn) checkNetworkBtn.addEventListener('click', updateNetworkStatus);
+            
+            // Update slider values
+            function updateTemperatureValue() {
+                temperatureValue.textContent = temperatureSlider.value;
+            }
+            
+            function updateTopKValue() {
+                topKValue.textContent = topKSlider.value;
+            }
+            
+            // Clear all logs
+            function clearAllLogs() {
+                clearLog(preGenerateLog);
+                clearLog(requestLog);
+                clearLog(responseLog);
+                clearLog(taskLog);
+                clearLog(audioLog);
+                requestData.textContent = '';
+                responseData.textContent = '';
+                taskData.textContent = '';
+                logToElement(preGenerateLog, 'All logs cleared');
+            }
+            
+            // Test URLs
+            function testUrls() {
+                const urlsToTest = [
+                    '/api/voices/list',
+                    '/api/voices',
+                    '/api/voices/generate',
+                    '/api/v1/generate'
+                ];
+                
+                logToElement(preGenerateLog, 'Starting URL tests...');
+                
+                urlsToTest.forEach(url => {
+                    fetch(url, { method: 'HEAD' })
+                        .then(response => {
+                            logToElement(preGenerateLog, `URL ${url}: ${response.status} ${response.statusText}`, 
+                                        response.ok ? 'info' : 'error');
+                        })
+                        .catch(error => {
+                            logToElement(preGenerateLog, `URL ${url}: Error - ${error.message}`, 'error');
+                        });
+                });
+            }
+            
+            // Toggle auto refresh
+            function toggleAutoRefresh() {
+                isAutoRefreshing = !isAutoRefreshing;
+                
+                if (isAutoRefreshing) {
+                    autoRefreshBtn.textContent = 'Stop Auto Refresh';
+                    refreshStatus.textContent = 'Auto-refreshing...';
+                    statusRefreshInterval = setInterval(checkTaskStatus, 1000);
+                } else {
+                    autoRefreshBtn.textContent = 'Auto Refresh';
+                    refreshStatus.textContent = '';
+                    clearInterval(statusRefreshInterval);
+                }
+            }
+            
+            // Handle form submission
+            async function handleFormSubmit(event) {
+                event.preventDefault();
+                
+                // Reset UI
+                clearLog(requestLog);
+                clearLog(responseLog);
+                clearLog(taskLog);
+                clearLog(audioLog);
+                requestData.textContent = '';
+                responseData.textContent = '';
+                taskData.textContent = '';
+                audioPlayer.style.display = 'none';
+                checkStatusBtn.disabled = true;
+                
+                // Disable generate button
+                generateBtn.disabled = true;
+                generateBtn.textContent = 'Generating...';
+                
+                logToElement(preGenerateLog, 'Starting voice generation process...');
+                
+                // Get form data
+                const formData = new FormData(debugVoiceForm);
+                const apiVersion = formData.get('api_version');
+                const endpointOverride = formData.get('endpoint_override');
+                
+                const data = {
+                    text: formData.get('text'),
+                    speaker_id: parseInt(formData.get('speaker_id')),
+                    temperature: parseFloat(formData.get('temperature')),
+                    top_k: parseInt(formData.get('top_k')),
+                    style: 'default',
+                    device: 'auto'
+                };
+                
+                // Log request details
+                logToElement(requestLog, `Preparing request with data...`);
+                setData(requestData, data);
+                
+                try {
+                    // Determine API endpoint
+                    let apiUrl;
+                    
+                    if (endpointOverride) {
+                        apiUrl = endpointOverride;
+                        logToElement(requestLog, `Using override endpoint: ${apiUrl}`);
+                    } else if (apiVersion === 'v1') {
+                        apiUrl = '/api/v1/generate';
+                        logToElement(requestLog, 'Using v1 API endpoint');
+                    } else if (apiVersion === 'voices') {
+                        apiUrl = '/api/voices/generate';
+                        logToElement(requestLog, 'Using voices API endpoint');
+                    } else {
+                        // Auto-detect - try voices first, then v1
+                        apiUrl = '/api/voices/generate';
+                        logToElement(requestLog, 'Auto-detect mode: trying voices API first');
+                    }
+                    
+                    // Send request
+                    logToElement(requestLog, `Sending POST request to ${apiUrl}`, 'info');
+                    let response;
+                    
+                    try {
+                        response = await fetch(apiUrl, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify(data)
+                        });
+                        
+                        logToElement(requestLog, `Initial response: ${response.status} ${response.statusText}`);
+                        
+                        // If auto-detect and first endpoint failed, try v1
+                        if (!response.ok && response.status === 404 && apiVersion === 'auto') {
+                            apiUrl = '/api/v1/generate';
+                            logToElement(requestLog, `Auto-detect: First endpoint failed, trying v1 API`, 'warning');
+                            
+                            response = await fetch(apiUrl, {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json'
+                                },
+                                body: JSON.stringify(data)
+                            });
+                            
+                            logToElement(requestLog, `Second response: ${response.status} ${response.statusText}`);
+                        }
+                    } catch (fetchError) {
+                        logToElement(requestLog, `Fetch error: ${fetchError.message}`, 'error');
+                        throw fetchError;
+                    }
+                    
+                    if (!response.ok) {
+                        logToElement(responseLog, `Server responded with error: ${response.status} ${response.statusText}`, 'error');
+                        throw new Error(`Server responded with status: ${response.status}`);
+                    }
+                    
+                    // Parse response
+                    let result;
+                    try {
+                        result = await response.json();
+                        logToElement(responseLog, 'Successfully parsed response JSON');
+                    } catch (jsonError) {
+                        logToElement(responseLog, `Error parsing response JSON: ${jsonError.message}`, 'error');
+                        throw jsonError;
+                    }
+                    
+                    setData(responseData, result);
+                    logToElement(responseLog, `Received response with task ID: ${result.task_id}`, 'info');
+                    
+                    // Clean and validate task ID
+                    try {
+                        if (!result.task_id) {
+                            logToElement(responseLog, 'No task ID in response', 'error');
+                            throw new Error('No task ID returned from server');
+                        }
+                        
+                        currentTaskId = String(result.task_id).trim();
+                        
+                        if (currentTaskId === 'undefined' || currentTaskId === 'null') {
+                            logToElement(responseLog, `Invalid task ID: ${currentTaskId}`, 'error');
+                            throw new Error(`Invalid task ID: ${currentTaskId}`);
+                        }
+                        
+                        taskIdInput.value = currentTaskId;
+                        logToElement(responseLog, `Task ID validated: ${currentTaskId}`);
+                        
+                        // Enable manual status check
+                        checkStatusBtn.disabled = false;
+                        
+                        // Start auto refresh if not already running
+                        if (!isAutoRefreshing) {
+                            toggleAutoRefresh();
+                        }
+                    } catch (taskIdError) {
+                        logToElement(responseLog, `Task ID validation error: ${taskIdError.message}`, 'error');
+                        throw taskIdError;
+                    }
+                    
+                } catch (error) {
+                    logToElement(responseLog, `Error: ${error.message}`, 'error');
+                    generateBtn.disabled = false;
+                    generateBtn.textContent = 'Generate Voice';
+                    return;
+                }
+                
+                // Enable buttons
+                generateBtn.disabled = false;
+                generateBtn.textContent = 'Generate Voice';
+            }
+            
+            // Check task status
+            async function checkTaskStatus(isManualCheck = false) {
+                if (!currentTaskId) {
+                    logToElement(taskLog, 'No task ID available', 'error');
+                    return;
+                }
+                
+                if (isManualCheck) {
+                    logToElement(taskLog, `Manually checking status for task: ${currentTaskId}`);
+                }
+                
+                try {
+                    // Try both API versions
+                    const apiEndpoints = [
+                        `/api/voices/tasks/${currentTaskId}`,
+                        `/api/v1/tasks/${currentTaskId}`
+                    ];
+                    
+                    let response = null;
+                    let usedEndpoint = '';
+                    
+                    // Try each endpoint until one works
+                    for (const endpoint of apiEndpoints) {
+                        try {
+                            logToElement(taskLog, `Trying endpoint: ${endpoint}`, isManualCheck ? 'info' : 'debug');
+                            const tempResponse = await fetch(endpoint);
+                            
+                            if (tempResponse.ok) {
+                                response = tempResponse;
+                                usedEndpoint = endpoint;
+                                logToElement(taskLog, `Successful response from ${endpoint}`, 'info');
+                                break;
+                            } else {
+                                logToElement(taskLog, `Endpoint ${endpoint} returned: ${tempResponse.status}`, 'warning');
+                            }
+                        } catch (endpointError) {
+                            logToElement(taskLog, `Error with endpoint ${endpoint}: ${endpointError.message}`, 'error');
+                        }
+                    }
+                    
+                    if (!response) {
+                        throw new Error('All status endpoints failed');
+                    }
+                    
+                    const taskData = await response.json();
+                    setData(document.getElementById('task-data'), taskData);
+                    
+                    if (isManualCheck || taskData.status !== 'processing') {
+                        logToElement(taskLog, `Task status: ${taskData.status}`, 'info');
+                    }
+                    
+                    // If task completed
+                    if (taskData.status === 'completed') {
+                        if (isAutoRefreshing) {
+                            toggleAutoRefresh();
+                        }
+                        
+                        processCompletedTask(taskData);
+                    } else if (taskData.status === 'failed') {
+                        if (isAutoRefreshing) {
+                            toggleAutoRefresh();
+                        }
+                        
+                        logToElement(taskLog, `Task failed: ${taskData.error || 'Unknown error'}`, 'error');
+                    }
+                } catch (error) {
+                    logToElement(taskLog, `Error checking status: ${error.message}`, 'error');
+                    
+                    if (isAutoRefreshing) {
+                        toggleAutoRefresh();
+                    }
+                }
+            }
+            
+            // Process completed task
+            function processCompletedTask(taskData) {
+                logToElement(audioLog, 'Processing completed task', 'info');
+                
+                try {
+                    // Find file URL - try different possible locations
+                    const fileUrl = 
+                        taskData.file_url || 
+                        taskData.result?.file_url || 
+                        taskData.output_file || 
+                        taskData.result?.output_file || 
+                        '';
+                    
+                    logToElement(audioLog, `Raw file URL from response: "${fileUrl}"`, 'info');
+                    
+                    if (!fileUrl) {
+                        logToElement(audioLog, 'No file URL found in response', 'error');
+                        return;
+                    }
+                    
+                    if (fileUrl === 'undefined' || fileUrl.includes('undefined')) {
+                        logToElement(audioLog, `Invalid file URL contains "undefined": ${fileUrl}`, 'error');
+                        return;
+                    }
+                    
+                    // Ensure URL has leading slash if relative
+                    const audioUrl = fileUrl.startsWith('/') ? fileUrl : `/${fileUrl}`;
+                    logToElement(audioLog, `Normalized audio URL: "${audioUrl}"`, 'info');
+                    
+                    // Set audio source
+                    try {
+                        voiceAudio.src = audioUrl;
+                        logToElement(audioLog, `Set audio.src to: "${audioUrl}"`, 'info');
+                    } catch (audioError) {
+                        logToElement(audioLog, `Error setting audio source: ${audioError.message}`, 'error');
+                    }
+                    
+                    // Display audio player
+                    audioPlayer.style.display = 'block';
+                    
+                    // Set URL displays
+                    audioUrlInput.value = audioUrl;
+                    
+                    // Generate full URL
+                    try {
+                        const origin = window.location.origin || 'http://localhost:8765';
+                        const fullUrl = audioUrl.startsWith('http') ? audioUrl : `${origin}${audioUrl}`;
+                        fullUrlInput.value = fullUrl;
+                        logToElement(audioLog, `Full URL: "${fullUrl}"`, 'info');
+                    } catch (urlError) {
+                        logToElement(audioLog, `Error constructing full URL: ${urlError.message}`, 'error');
+                    }
+                    
+                } catch (error) {
+                    logToElement(audioLog, `Error processing completed task: ${error.message}`, 'error');
+                }
+            }
+            
+            // Download audio
+            function downloadAudio() {
+                const url = audioUrlInput.value;
+                
+                if (!url) {
+                    logToElement(audioLog, 'No URL available for download', 'error');
+                    return;
+                }
+                
+                logToElement(audioLog, `Initiating download with URL: "${url}"`, 'info');
+                
+                try {
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = `echoforge_debug_${Date.now()}.wav`;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    logToElement(audioLog, 'Download initiated', 'info');
+                } catch (error) {
+                    logToElement(audioLog, `Error initiating download: ${error.message}`, 'error');
+                }
+            }
+            
+            // Copy audio link
+            function copyAudioLink() {
+                const url = fullUrlInput.value;
+                
+                if (!url) {
+                    logToElement(audioLog, 'No URL available for copying', 'error');
+                    return;
+                }
+                
+                logToElement(audioLog, `Copying URL to clipboard: "${url}"`, 'info');
+                
+                try {
+                    navigator.clipboard.writeText(url)
+                        .then(() => {
+                            logToElement(audioLog, 'URL copied to clipboard', 'info');
+                            copyLinkBtn.textContent = 'Copied!';
+                            setTimeout(() => {
+                                copyLinkBtn.textContent = 'Copy Link';
+                            }, 2000);
+                        })
+                        .catch(err => {
+                            logToElement(audioLog, `Clipboard error: ${err.message}`, 'error');
+                        });
+                } catch (error) {
+                    logToElement(audioLog, `Error setting up clipboard operation: ${error.message}`, 'error');
+                }
+            }
+            
+            // Initialize
+            logToElement(preGenerateLog, 'Debug page initialized');
+            setData(networkStatus, { online: navigator.onLine, ready: true });
+        });
+    </script>
+</body>
+</html> 
