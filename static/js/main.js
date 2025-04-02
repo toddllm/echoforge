@@ -255,18 +255,27 @@ document.addEventListener('DOMContentLoaded', () => {
             if (taskData.status === 'completed') {
                 clearInterval(statusCheckInterval);
                 
-                // Set audio source
+                // Set audio source - make sure we have valid URLs
                 const fileUrl = taskData.file_url || taskData.result?.file_url || 
-                                taskData.output_file || taskData.result?.output_file;
+                                taskData.output_file || taskData.result?.output_file || '';
                                 
                 if (fileUrl && voiceAudio && audioPlayer) {
-                    console.log('Setting audio URL:', fileUrl);
-                    voiceAudio.src = fileUrl;
+                    // Ensure fileUrl starts with / if it's a relative URL
+                    const audioUrl = fileUrl.startsWith('/') ? fileUrl : `/${fileUrl}`;
+                    console.log('Setting audio URL:', audioUrl);
+                    voiceAudio.src = audioUrl;
                     audioPlayer.style.display = 'block';
                     
                     // Set download and copy link data
-                    if (downloadBtn) downloadBtn.dataset.url = fileUrl;
-                    if (copyLinkBtn) copyLinkBtn.dataset.url = window.location.origin + fileUrl;
+                    if (downloadBtn) downloadBtn.dataset.url = audioUrl;
+                    
+                    // Ensure we construct a valid full URL for copying
+                    if (copyLinkBtn) {
+                        const origin = window.location.origin || 'http://localhost:8765';
+                        const fullUrl = audioUrl.startsWith('http') ? audioUrl : `${origin}${audioUrl}`;
+                        copyLinkBtn.dataset.url = fullUrl;
+                        console.log('Copy URL set to:', fullUrl);
+                    }
                     
                     if (taskStatus) taskStatus.textContent = 'Voice generation complete!';
                 } else if (taskStatus) {
@@ -303,13 +312,22 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!downloadBtn) return;
         
         const url = downloadBtn.dataset.url;
-        if (url) {
+        if (!url || url === 'undefined') {
+            console.error('Invalid download URL:', url);
+            alert('Sorry, download URL is not available.');
+            return;
+        }
+        
+        try {
             const link = document.createElement('a');
             link.href = url;
             link.download = 'echoforge_voice.wav';
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
+        } catch (error) {
+            console.error('Error downloading audio:', error);
+            alert('Failed to download audio file.');
         }
     }
     
