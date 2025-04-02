@@ -46,7 +46,15 @@ document.addEventListener('DOMContentLoaded', () => {
     // Load voices from API
     async function loadVoices() {
         try {
-            const response = await fetch('/api/voices');
+            // Try first with /api/voices/list endpoint
+            let response = await fetch('/api/voices/list');
+            
+            // If that fails, try with /api/voices endpoint
+            if (!response.ok && response.status === 404) {
+                console.log('Trying alternate voice API endpoint...');
+                response = await fetch('/api/voices');
+            }
+            
             if (!response.ok) {
                 throw new Error(`Server responded with status: ${response.status}`);
             }
@@ -59,23 +67,45 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             
             // Add voice options
-            voices.forEach(voice => {
-                const option = document.createElement('option');
-                option.value = voice.speaker_id;
-                option.textContent = `${voice.name} (${voice.gender || 'Unknown'})`;
-                speakerSelect.appendChild(option);
-            });
+            if (Array.isArray(voices) && voices.length > 0) {
+                voices.forEach(voice => {
+                    if (!voice || typeof voice !== 'object') return;
+                    
+                    const option = document.createElement('option');
+                    option.value = voice.speaker_id;
+                    option.textContent = `${voice.name || 'Voice ' + voice.speaker_id} (${voice.gender || 'Unknown'})`;
+                    speakerSelect.appendChild(option);
+                });
+            } else {
+                console.warn('API returned empty or non-array voices data');
+                addFallbackVoiceOptions();
+            }
             
             // Enable the select
             speakerSelect.disabled = false;
         } catch (error) {
             console.error('Error loading voices:', error);
-            // Add a fallback option if voices can't be loaded
-            const option = document.createElement('option');
-            option.value = "1";
-            option.textContent = "Default Voice";
-            speakerSelect.appendChild(option);
+            // Add fallback options if voices can't be loaded
+            addFallbackVoiceOptions();
         }
+    }
+
+    // Add fallback voice options
+    function addFallbackVoiceOptions() {
+        // Add some default voice options
+        const defaultVoices = [
+            { id: 1, name: "Default Male Voice", gender: "male" },
+            { id: 2, name: "Default Female Voice", gender: "female" },
+            { id: 3, name: "Deep Male Voice", gender: "male" },
+            { id: 4, name: "Soft Female Voice", gender: "female" }
+        ];
+        
+        defaultVoices.forEach(voice => {
+            const option = document.createElement('option');
+            option.value = voice.id;
+            option.textContent = `${voice.name} (${voice.gender})`;
+            speakerSelect.appendChild(option);
+        });
     }
 
     // Theme functions
@@ -144,8 +174,9 @@ document.addEventListener('DOMContentLoaded', () => {
         };
         
         try {
-            // Send request to generate voice
-            const response = await fetch('/api/generate', {
+            // Try the main API first
+            let apiUrl = '/api/voices/generate';
+            let response = await fetch(apiUrl, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -153,12 +184,31 @@ document.addEventListener('DOMContentLoaded', () => {
                 body: JSON.stringify(data)
             });
             
+            // If that fails with 404, try the v1 API
+            if (!response.ok && response.status === 404) {
+                console.log('Trying v1 API for generation...');
+                apiUrl = '/api/v1/generate';
+                response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                });
+            }
+            
             if (!response.ok) {
                 throw new Error(`Server responded with status: ${response.status}`);
             }
             
             const result = await response.json();
             currentTaskId = result.task_id;
+            
+            if (!currentTaskId) {
+                throw new Error('No task ID returned from server');
+            }
+            
+            console.log('Generation task started with ID:', currentTaskId);
             
             // Start checking task status
             statusCheckInterval = setInterval(checkTaskStatus, 1000);
@@ -173,7 +223,24 @@ document.addEventListener('DOMContentLoaded', () => {
     // Check task status
     async function checkTaskStatus() {
         try {
-            const response = await fetch(`/api/tasks/${currentTaskId}`);
+            if (!currentTaskId) {
+                console.error('No task ID available for status check');
+                if (taskStatus) taskStatus.textContent = "Error: No task ID available";
+                clearInterval(statusCheckInterval);
+                resetGenerateButton();
+                return;
+            }
+
+            // Use the appropriate API endpoint based on availability
+            let taskUrl = `/api/voices/tasks/${currentTaskId}`;
+            let response = await fetch(taskUrl);
+            
+            // Try v1 API if the main API fails
+            if (!response.ok && response.status === 404) {
+                console.log('Trying v1 API for task status...');
+                taskUrl = `/api/v1/tasks/${currentTaskId}`;
+                response = await fetch(taskUrl);
+            }
             
             if (!response.ok) {
                 throw new Error(`Server responded with status: ${response.status}`);
@@ -189,8 +256,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 clearInterval(statusCheckInterval);
                 
                 // Set audio source
-                const fileUrl = taskData.file_url || taskData.result?.file_url;
+                const fileUrl = taskData.file_url || taskData.result?.file_url || 
+                                taskData.output_file || taskData.result?.output_file;
+                                
                 if (fileUrl && voiceAudio && audioPlayer) {
+                    console.log('Setting audio URL:', fileUrl);
                     voiceAudio.src = fileUrl;
                     audioPlayer.style.display = 'block';
                     
@@ -200,6 +270,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     
                     if (taskStatus) taskStatus.textContent = 'Voice generation complete!';
                 } else if (taskStatus) {
+                    console.error('No file URL returned in completed task:', taskData);
                     taskStatus.textContent = 'Voice generated but no file URL was returned.';
                 }
                 
