@@ -13,6 +13,23 @@ Options:
     --force    Overwrite existing voice files if they exist
     --cpu      Force CPU usage instead of GPU (slower but works on all systems)
 
+Requirements for high-quality voice generation:
+    1. csm-voice-cloning directory must be set up:
+       - This directory should contain: generator.py, models.py, etc.
+    
+    2. Required Python packages (install with pip):
+       - torch==2.4.0
+       - torchaudio==2.4.0
+       - transformers==4.49.0
+       - huggingface_hub==0.28.1
+       - moshi==0.2.2
+       - torchtune==0.4.0
+       - torchao==0.9.0
+       - silentcipher (from GitHub)
+       
+    You can install all required packages with:
+    pip install -r csm-voice-cloning/requirements.txt
+
 The script will:
 1. Create the necessary directory structure
 2. Download the CSM voice generation model
@@ -35,10 +52,11 @@ try:
     from generator import load_csm_1b, Segment
     CSM_AVAILABLE = True
     print("Successfully imported CSM modules from csm-voice-cloning")
-except ImportError:
-    print("Warning: CSM voice generation modules not found")
+except ImportError as e:
+    print(f"Warning: CSM voice generation modules not found: {e}")
     print("Voice files will be generated using basic waveforms instead")
     print("For high-quality voices, ensure the csm-voice-cloning directory is present")
+    print("and all dependencies are installed (see requirements.txt in that directory)")
     CSM_AVAILABLE = False
 
 # Try to import torch, required for CSM
@@ -47,13 +65,28 @@ try:
     import torchaudio
     from huggingface_hub import hf_hub_download
     TORCH_AVAILABLE = True
-except ImportError:
-    print("Warning: PyTorch not found, required for high-quality voice generation")
-    print("Install with: pip install torch torchaudio")
+except ImportError as e:
+    print(f"Warning: PyTorch not found: {e}")
+    print("Install required packages with: pip install -r csm-voice-cloning/requirements.txt")
     TORCH_AVAILABLE = False
     
-# Only if both torch and CSM are unavailable, import numpy for basic waveform generation
-if not (CSM_AVAILABLE and TORCH_AVAILABLE):
+# Try to import other required packages for CSM
+if CSM_AVAILABLE and TORCH_AVAILABLE:
+    try:
+        # These imports are just to check if the packages are available
+        import moshi
+        import transformers
+        import tokenizers
+        ALL_DEPS_AVAILABLE = True
+    except ImportError as e:
+        print(f"Warning: Additional dependencies for CSM not found: {e}")
+        print("Install required packages with: pip install -r csm-voice-cloning/requirements.txt")
+        ALL_DEPS_AVAILABLE = False
+else:
+    ALL_DEPS_AVAILABLE = False
+    
+# Only if dependencies are unavailable, import numpy for basic waveform generation
+if not ALL_DEPS_AVAILABLE:
     import numpy as np
     import wave
     import struct
@@ -306,9 +339,18 @@ def main():
     parser = argparse.ArgumentParser(description="Setup voice files for EchoForge")
     parser.add_argument("--force", action="store_true", help="Overwrite existing voice files")
     parser.add_argument("--cpu", action="store_true", help="Force CPU usage (slower but works on all systems)")
+    parser.add_argument("--skip-deps-check", action="store_true", help="Skip dependency checks and try to run anyway")
     args = parser.parse_args()
     
     print("\n=== EchoForge Voice Setup ===\n")
+    
+    # Print dependency status
+    if not args.skip_deps_check:
+        print("Dependency Status:")
+        print(f"  PyTorch Available: {'Yes' if TORCH_AVAILABLE else 'No'}")
+        print(f"  CSM Modules Available: {'Yes' if CSM_AVAILABLE else 'No'}")
+        print(f"  All Dependencies Available: {'Yes' if ALL_DEPS_AVAILABLE else 'No'}")
+        print("")
     
     # Setup directory structure
     setup_directory_structure()
@@ -324,13 +366,14 @@ def main():
         print(f"Found {len(existing_files)} existing voice files in {target_dir}")
         print("Using existing voice files. Use --force to regenerate.")
     else:
-        # Determine device for CSM model
-        device = "cpu" if args.cpu else "cuda" if torch.cuda.is_available() else "cpu"
-        if device == "cpu" and not args.cpu:
-            print("CUDA not available, falling back to CPU (use --cpu to avoid this message)")
-        
-        # Generate voice files using available methods
-        if CSM_AVAILABLE and TORCH_AVAILABLE:
+        # Check if we have all the required dependencies for CSM
+        if ALL_DEPS_AVAILABLE or args.skip_deps_check:
+            # Determine device for CSM model
+            device = "cpu" if args.cpu else "cuda" if torch.cuda.is_available() else "cpu"
+            if device == "cpu" and not args.cpu:
+                print("CUDA not available, falling back to CPU (use --cpu to avoid this message)")
+            
+            # Generate voice files using CSM
             try:
                 # Download CSM model
                 print("Downloading CSM voice model...")
@@ -374,7 +417,9 @@ def main():
                 print("Falling back to basic voice generation...")
                 generate_basic_voices(target_dir)
         else:
-            print("Using basic voice generation since CSM model is not available")
+            print("\nUsing basic voice generation since CSM model dependencies are not available")
+            print("To use high-quality voice generation, install the required dependencies:")
+            print("pip install -r csm-voice-cloning/requirements.txt")
             generate_basic_voices(target_dir)
     
     # Create metadata file
