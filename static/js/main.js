@@ -202,12 +202,20 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             
             const result = await response.json();
+            console.log('Generation response:', result);
+
+            // Clean and validate task ID
             currentTaskId = result.task_id;
-            
-            if (!currentTaskId) {
-                throw new Error('No task ID returned from server');
+            if (!currentTaskId || currentTaskId === 'undefined' || typeof currentTaskId !== 'string') {
+                throw new Error('Invalid or missing task ID returned from server');
             }
-            
+
+            // Clean any whitespace and make sure it's a valid format
+            currentTaskId = currentTaskId.trim();
+            if (!/^[a-zA-Z0-9_.-]+$/.test(currentTaskId)) {
+                console.warn(`Task ID contains unusual characters: ${currentTaskId}`);
+            }
+
             console.log('Generation task started with ID:', currentTaskId);
             
             // Start checking task status
@@ -271,10 +279,29 @@ document.addEventListener('DOMContentLoaded', () => {
                     
                     // Ensure we construct a valid full URL for copying
                     if (copyLinkBtn) {
-                        const origin = window.location.origin || 'http://localhost:8765';
-                        const fullUrl = audioUrl.startsWith('http') ? audioUrl : `${origin}${audioUrl}`;
-                        copyLinkBtn.dataset.url = fullUrl;
-                        console.log('Copy URL set to:', fullUrl);
+                        let fullUrl = '';
+                        try {
+                            const origin = window.location.origin || 'http://localhost:8765';
+                            
+                            // Make sure we don't have 'undefined' in the URL
+                            if (audioUrl && audioUrl !== 'undefined' && !audioUrl.includes('undefined')) {
+                                fullUrl = audioUrl.startsWith('http') ? audioUrl : `${origin}${audioUrl}`;
+                                // Final check to ensure no 'undefined' in the URL
+                                if (fullUrl && !fullUrl.includes('undefined')) {
+                                    copyLinkBtn.dataset.url = fullUrl;
+                                    console.log('Copy URL set to:', fullUrl);
+                                } else {
+                                    console.error('Invalid URL construction, contains undefined:', fullUrl);
+                                    copyLinkBtn.dataset.url = '';
+                                }
+                            } else {
+                                console.error('Invalid audio URL for constructing full URL:', audioUrl);
+                                copyLinkBtn.dataset.url = '';
+                            }
+                        } catch (error) {
+                            console.error('Error constructing full URL:', error);
+                            copyLinkBtn.dataset.url = '';
+                        }
                     }
                     
                     if (taskStatus) taskStatus.textContent = 'Voice generation complete!';
@@ -336,7 +363,13 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!copyLinkBtn) return;
         
         const url = copyLinkBtn.dataset.url;
-        if (url) {
+        if (!url || url === 'undefined' || url.includes('undefined')) {
+            console.error('Invalid copy URL:', url);
+            alert('Sorry, audio URL is not available for copying.');
+            return;
+        }
+        
+        try {
             navigator.clipboard.writeText(url)
                 .then(() => {
                     const originalText = copyLinkBtn.textContent;
@@ -349,6 +382,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     console.error('Failed to copy link:', err);
                     alert('Failed to copy link to clipboard.');
                 });
+        } catch (error) {
+            console.error('Error setting up clipboard copy:', error);
+            alert('Failed to copy link to clipboard.');
         }
     }
 
